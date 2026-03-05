@@ -84,7 +84,7 @@ _BUSY_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"Generating"),
     re.compile(r"Working\.\.\."),
     re.compile(r"●\s*$"),               # solid-dot spinner
-    re.compile(r"\bESC\b.*to interrupt"),
+    re.compile(r"\bESC\b.*to interrupt", re.IGNORECASE),
 ]
 
 # How many trailing lines to inspect for prompt / busy patterns.

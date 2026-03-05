@@ -133,6 +133,8 @@ def detect_claude_status(lines: list[str]) -> str:
         return "thinking"
     if re.search(r"Thinking\.\.\.|Generating|Working\.\.\.", tail_text):
         return "thinking"
+    if re.search(r"\besc\b.*to interrupt", tail_text, re.IGNORECASE):
+        return "thinking"
     # Prompt markers
     if re.search(r"^\s*[╰>─]+\s*>?\s*$", tail_text, re.MULTILINE):
         return "ready"
