@@ -205,27 +205,18 @@ class TmuxTransport:
         except Exception as exc:
             raise TransportError(f"send_ctrl failed: {exc}") from exc
 
-    def capture(
-        self,
-        start: int = 0,
-        end: int = -1,
-        strip_ansi: bool = True,
-    ) -> PaneSnapshot:
+    def capture(self) -> PaneSnapshot:
         """
-        Capture the current pane content.
+        Capture the current visible pane content.
 
-        Parameters
-        ----------
-        start / end:
-            Line range within the scrollback buffer (0 = oldest visible line,
-            -1 = bottom of pane).  Default captures the full visible area.
-        strip_ansi:
-            Passed through to libtmux's capture_pane.  When True, tmux is
-            asked to strip colour/attribute escape sequences.
+        Returns a PaneSnapshot with the full content of the tmux pane.
+        Note: start/end parameters were removed for libtmux >= 0.17 compatibility;
+        capture_pane() is called with no arguments to capture the visible area.
         """
         try:
-            # libtmux's capture_pane returns a list[str] of lines.
-            lines: list[str] = self.pane.capture_pane(start=start, end=end)
+            # Call with no args for compatibility with libtmux >= 0.17.
+            # Passing start/end kwargs silently returns empty in newer versions.
+            lines: list[str] = self.pane.capture_pane()
         except Exception as exc:
             raise TransportError(f"capture_pane failed: {exc}") from exc
 
