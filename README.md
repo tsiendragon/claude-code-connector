@@ -143,6 +143,102 @@ strategy:
    gap.  If the content is identical and enough time has passed, assume
    generation is done.
 
+## Verification guide
+
+A step-by-step checklist for confirming the package works end-to-end on a
+real machine.
+
+### Prerequisites
+
+```bash
+tmux -V          # tmux 3.0+
+claude --version # Claude Code CLI installed
+```
+
+If tmux is missing: `brew install tmux` (macOS) or `apt install tmux` (Linux).
+
+### Step 1 — Unit tests (no tmux required)
+
+```bash
+pip install -e ".[dev]"
+make test
+```
+
+Expected output:
+
+```
+87 passed in 0.2s
+```
+
+### Step 2 — Create a session
+
+```bash
+ccc run smoke-test
+```
+
+Expected output:
+
+```
+✓ Session smoke-test started (tmux: ccc-smoke-test)
+  cwd: .
+  To send a message: ccc send smoke-test "your message"
+```
+
+> **Note:** Claude Code shows a one-time trust prompt on first launch in a
+> directory. If the session appears stuck, send `ccc send smoke-test "1"` to
+> confirm "Yes, I trust this folder", then continue.
+
+### Step 3 — Send a message and read the response
+
+```bash
+ccc send smoke-test "say hello in one sentence"
+# wait 3-5 seconds for Claude to respond
+ccc tail smoke-test -n 20
+```
+
+Expected output (actual wording will vary):
+
+```
+❯ say hello in one sentence
+
+⏺ Hello there, nice to meet you!
+
+❯
+```
+
+Verify:
+- Output is clean text — no ANSI escape codes or box-drawing garbage
+- Claude's reply appears between the two `❯` prompt lines
+- The idle `❯` prompt at the bottom confirms Claude is ready for the next message
+
+### Step 4 — Clean up
+
+```bash
+ccc kill smoke-test
+ccc ps    # list should be empty
+```
+
+### Step 5 — Demo Web UI (optional, end-to-end visual check)
+
+```bash
+cd demo
+pip install -r requirements.txt
+uvicorn server:app --reload --port 8000
+```
+
+Open `http://localhost:8000`, type a session name, click **Connect**, and chat.
+Verify that:
+- Output streams in real time (not dumped all at once)
+- Status bar toggles between `thinking` and `ready`
+- Numbered choice menus (e.g. model selection) render as clickable buttons
+
+### Known compatibility notes
+
+| Issue | Fix applied |
+|-------|-------------|
+| `libtmux.Server.find_where()` removed in 0.17 | Replaced with `srv.sessions.get(session_name=..., default=None)` |
+| `capture_pane(start=0, end=-1)` returns `[]` in libtmux ≥ 0.17 | Removed `start`/`end` kwargs; `capture_pane()` called with no arguments |
+
 ## Development
 
 ```bash
