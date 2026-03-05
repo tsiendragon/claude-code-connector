@@ -227,25 +227,38 @@ def detect_choices(lines: list[str]) -> list[ChoiceItem] | None:
     if len(numbered) >= 2:
         return numbered
 
-    # --- Try arrow / bullet cursor style ---
-    cursor_items: list[ChoiceItem] = []
+    # --- Try arrow / bullet cursor style (consecutive lines only) ---
+    # Real choice menus (e.g. model picker) have arrow/bullet lines back-to-back.
+    # User-input echoes also start with ❯ but are scattered throughout the pane
+    # with Claude responses between them — so we only accept a CONTIGUOUS block.
+    last_block: list[ChoiceItem] = []
+    current_block: list[ChoiceItem] = []
+
     for line in tail:
         ma = _ARROW_RE.match(line)
         if ma:
-            cursor_items.append(ChoiceItem(
-                key=str(len(cursor_items) + 1),
+            current_block.append(ChoiceItem(
+                key=str(len(current_block) + 1),
                 label=ma.group(1).strip(),
-                selected=True,  # arrow line = current selection
+                selected=True,
             ))
             continue
         mb = _BULLET_RE.match(line)
         if mb:
-            cursor_items.append(ChoiceItem(
-                key=str(len(cursor_items) + 1),
+            current_block.append(ChoiceItem(
+                key=str(len(current_block) + 1),
                 label=mb.group(1).strip(),
             ))
+            continue
+        # Any non-arrow/bullet line breaks the block.
+        if current_block:
+            last_block = current_block
+            current_block = []
 
-    return cursor_items if len(cursor_items) >= 2 else None
+    if current_block:
+        last_block = current_block
+
+    return last_block if len(last_block) >= 2 else None
 
 
 # ---------------------------------------------------------------------------

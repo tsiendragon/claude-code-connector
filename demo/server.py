@@ -84,28 +84,41 @@ def detect_choice_menu(lines: list[str]) -> list[dict] | None:
     clean = strip_ansi_lines(lines)
     tail = clean[-20:]   # check last 20 lines
 
-    choices: list[dict] = []
-
-    # Numbered list
+    # Numbered list (consecutive matching lines)
+    numbered: list[dict] = []
     for line in tail:
         m = _CHOICE_NUMBER_RE.match(line)
         if m:
-            choices.append({"key": m.group(1), "label": m.group(2).strip()})
+            numbered.append({"key": m.group(1), "label": m.group(2).strip()})
 
-    if len(choices) >= 2:
-        return choices
+    if len(numbered) >= 2:
+        return numbered
 
-    # Arrow-style (interactive cursor menus)
-    for i, line in enumerate(tail):
+    # Arrow/bullet style — only accept a CONTIGUOUS block.
+    # Claude Code uses ❯ as its input prompt too, so scattered ❯ lines
+    # throughout the conversation must NOT be treated as a choice menu.
+    last_block: list[dict] = []
+    current_block: list[dict] = []
+
+    for line in tail:
         m = _CHOICE_ARROW_RE.match(line)
         if m:
-            choices.append({"key": str(len(choices) + 1), "label": m.group(1).strip(), "selected": True})
-        else:
-            mb = _CHOICE_BULLET_RE.match(line)
-            if mb:
-                choices.append({"key": str(len(choices) + 1), "label": mb.group(1).strip()})
+            current_block.append({"key": str(len(current_block) + 1),
+                                   "label": m.group(1).strip(), "selected": True})
+            continue
+        mb = _CHOICE_BULLET_RE.match(line)
+        if mb:
+            current_block.append({"key": str(len(current_block) + 1),
+                                   "label": mb.group(1).strip()})
+            continue
+        if current_block:
+            last_block = current_block
+            current_block = []
 
-    return choices if len(choices) >= 2 else None
+    if current_block:
+        last_block = current_block
+
+    return last_block if len(last_block) >= 2 else None
 
 
 def detect_claude_status(lines: list[str]) -> str:
