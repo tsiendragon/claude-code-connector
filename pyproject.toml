@@ -13,6 +13,11 @@ authors = [{ name = "Lilong Qian", email = "lilong.qian@okg.com" }]
 
 keywords = ["claude", "claude-code", "tmux", "cli", "connector", "ai"]
 
+[project.urls]
+Homepage = "https://github.com/qianyilong/claude-cli-connector"
+Repository = "https://github.com/qianyilong/claude-cli-connector"
+"Bug Tracker" = "https://github.com/qianyilong/claude-cli-connector/issues"
+
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",

@@ -7,8 +7,15 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-- Nothing yet.
+### Fixed
+- `libtmux` compatibility: replaced removed `Server.find_where()` with
+  `srv.sessions.get(session_name=..., default=None)` (breaking change in 0.17).
+- `capture_pane(start=0, end=-1)` silently returned `[]` in libtmux ≥ 0.17;
+  switched to no-argument call.
+- Choice detection: arrow/bullet lines scattered across conversation history
+  (Claude Code uses `❯` as its input prompt) were falsely detected as a
+  selection menu. Fixed by requiring a **contiguous** block of arrow/bullet
+  lines — real choice menus are always consecutive.
 
 ---
 
