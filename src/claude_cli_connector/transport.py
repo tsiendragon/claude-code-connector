@@ -114,7 +114,7 @@ class TmuxTransport:
         srv = server or libtmux.Server()
 
         # Fail fast if a session with this name already exists.
-        existing = srv.find_where({"session_name": full_name})
+        existing = srv.sessions.get(session_name=full_name, default=None)
         if existing is not None:
             raise TransportError(
                 f"tmux session '{full_name}' already exists. "
@@ -152,7 +152,7 @@ class TmuxTransport:
         """
         full_name = SESSION_PREFIX + name
         srv = server or libtmux.Server()
-        session = srv.find_where({"session_name": full_name})
+        session = srv.sessions.get(session_name=full_name, default=None)
         if session is None:
             raise TransportError(
                 f"No tmux session named '{full_name}' found. "
@@ -237,7 +237,7 @@ class TmuxTransport:
             return False
         try:
             name = self._tmux_session_name
-            found = self._server.find_where({"session_name": name})
+            found = self._server.sessions.get(session_name=name, default=None)
             return found is not None
         except Exception:
             return False

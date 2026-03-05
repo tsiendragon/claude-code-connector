@@ -6,7 +6,7 @@ actual tmux server.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 from claude_cli_connector.transport import TmuxTransport, SESSION_PREFIX
 from claude_cli_connector.exceptions import TransportError
@@ -15,7 +15,8 @@ from claude_cli_connector.exceptions import TransportError
 @pytest.fixture
 def mock_server():
     server = MagicMock()
-    server.find_where.return_value = None   # no existing sessions by default
+    # New libtmux API: srv.sessions.get(session_name=..., default=None)
+    server.sessions.get.return_value = None   # no existing sessions by default
     return server
 
 
@@ -42,7 +43,7 @@ class TestTmuxTransportCreate:
                 TmuxTransport.create(name="test", cwd=".", server=mock_server)
 
     def test_raises_if_session_already_exists(self, mock_server):
-        mock_server.find_where.return_value = MagicMock()  # session exists
+        mock_server.sessions.get.return_value = MagicMock()  # session exists
         with patch("shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TransportError, match="already exists"):
                 TmuxTransport.create(name="test", cwd=".", server=mock_server)
@@ -59,19 +60,19 @@ class TestTmuxTransportCreate:
 
 class TestTmuxTransportAttach:
     def test_raises_if_not_found(self, mock_server):
-        mock_server.find_where.return_value = None
+        mock_server.sessions.get.return_value = None
         with pytest.raises(TransportError, match="No tmux session"):
             TmuxTransport.attach(name="missing", server=mock_server)
 
     def test_attaches_successfully(self, mock_server, mock_session):
-        mock_server.find_where.return_value = mock_session
+        mock_server.sessions.get.return_value = mock_session
         transport = TmuxTransport.attach(name="existing", server=mock_server)
         assert transport.logical_name == "existing"
 
 
 class TestTmuxTransportCapture:
     def test_capture_returns_snapshot(self, mock_server, mock_session, mock_pane):
-        mock_server.find_where.return_value = mock_session
+        mock_server.sessions.get.return_value = mock_session
         transport = TmuxTransport.attach(name="s", server=mock_server)
         snapshot = transport.capture()
         assert snapshot.lines == ["line1", "line2", "> "]
@@ -79,7 +80,7 @@ class TestTmuxTransportCapture:
 
     def test_capture_raises_on_error(self, mock_server, mock_session, mock_pane):
         mock_pane.capture_pane.side_effect = RuntimeError("tmux gone")
-        mock_server.find_where.return_value = mock_session
+        mock_server.sessions.get.return_value = mock_session
         transport = TmuxTransport.attach(name="s", server=mock_server)
         with pytest.raises(TransportError, match="capture_pane failed"):
             transport.capture()
@@ -87,14 +88,14 @@ class TestTmuxTransportCapture:
 
 class TestTmuxTransportSendKeys:
     def test_send_keys_called(self, mock_server, mock_session, mock_pane):
-        mock_server.find_where.return_value = mock_session
+        mock_server.sessions.get.return_value = mock_session
         transport = TmuxTransport.attach(name="s", server=mock_server)
         transport.send_keys("hello")
         mock_pane.send_keys.assert_called_once_with("hello", enter=True, suppress_history=False)
 
     def test_send_keys_raises_on_error(self, mock_server, mock_session, mock_pane):
         mock_pane.send_keys.side_effect = RuntimeError("oh no")
-        mock_server.find_where.return_value = mock_session
+        mock_server.sessions.get.return_value = mock_session
         transport = TmuxTransport.attach(name="s", server=mock_server)
         with pytest.raises(TransportError, match="send_keys failed"):
             transport.send_keys("hi")
@@ -102,14 +103,14 @@ class TestTmuxTransportSendKeys:
 
 class TestTmuxTransportIsAlive:
     def test_alive_when_session_found(self, mock_server, mock_session):
-        mock_server.find_where.return_value = mock_session
+        mock_server.sessions.get.return_value = mock_session
         transport = TmuxTransport.attach(name="s", server=mock_server)
         # After attach, is_alive queries the server again
-        mock_server.find_where.return_value = mock_session
+        mock_server.sessions.get.return_value = mock_session
         assert transport.is_alive() is True
 
     def test_dead_when_session_gone(self, mock_server, mock_session):
-        mock_server.find_where.return_value = mock_session
+        mock_server.sessions.get.return_value = mock_session
         transport = TmuxTransport.attach(name="s", server=mock_server)
-        mock_server.find_where.return_value = None
+        mock_server.sessions.get.return_value = None
         assert transport.is_alive() is False
