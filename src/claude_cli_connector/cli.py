@@ -5,13 +5,14 @@ Typer-based CLI entry point.  Installed as the ``ccc`` command.
 
 Commands
 --------
-  ccc run    <name> [--cwd DIR] [--cmd STR]   Start a new Claude session
-  ccc attach <name>                            Attach to an existing session
-  ccc send   <name> <message>                  Send a message and print response
-  ccc tail   <name> [--lines N]                Print last N lines of pane
-  ccc ps                                       List all known sessions
-  ccc kill   <name>                            Kill a session
-  ccc interrupt <name>                         Send Ctrl-C to a session
+  ccc run       <name> [--cwd DIR] [--cmd STR]   Start a new Claude session
+  ccc attach    <name>                            Attach to an existing session
+  ccc send      <name> <message>                  Send a message and print response
+  ccc tail      <name> [--lines N]                Print last N lines of pane
+  ccc status    <name> [--porcelain]              Show session state (thinking/ready/dead)
+  ccc ps                                          List all known sessions
+  ccc kill      <name>                            Kill a session
+  ccc interrupt <name>                            Send Ctrl-C to a session
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from rich.table import Table
 from rich import print as rprint
 
 from claude_cli_connector.exceptions import ConnectorError
+from claude_cli_connector.parser import detect_ready
 from claude_cli_connector.session import ClaudeSession
 from claude_cli_connector.store import get_default_store
 
@@ -162,6 +164,62 @@ def ps() -> None:
         table.add_row(r.name, r.tmux_session_name, r.cwd, alive_str, created)
 
     console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# status
+# ---------------------------------------------------------------------------
+
+@app.command()
+def status(
+    name: Annotated[str, typer.Argument(help="Session name")],
+    porcelain: Annotated[bool, typer.Option("--porcelain", help="Machine-readable: print only thinking|ready|dead")] = False,
+) -> None:
+    """Show the current state of a Claude CLI session (thinking / ready / dead)."""
+    try:
+        session = ClaudeSession.attach(name=name)
+    except ConnectorError as exc:
+        if porcelain:
+            print("dead")
+        else:
+            _bail(str(exc))
+        raise typer.Exit(1)
+
+    if not session.is_alive():
+        if porcelain:
+            print("dead")
+        else:
+            rprint(f"[red]✗[/red] [bold]{name}[/bold] — [red]dead[/red] (tmux session gone)")
+        raise typer.Exit(1)
+
+    snapshot = session.transport.capture()
+    result = detect_ready(snapshot.lines)
+    choices = session.detect_choices()
+
+    if choices:
+        state = "choosing"
+    elif result.is_ready:
+        state = "ready"
+    else:
+        state = "thinking"
+
+    if porcelain:
+        print(state)
+        return
+
+    # Human-readable output
+    STATE_STYLE = {
+        "ready":    "[green]ready[/green]",
+        "thinking": "[yellow]thinking[/yellow]",
+        "choosing": "[purple]choosing[/purple]",
+    }
+    rprint(f"[bold]{name}[/bold] — {STATE_STYLE[state]}  "
+           f"[dim](confidence: {result.confidence})[/dim]")
+
+    if choices:
+        rprint(f"  [dim]choices:[/dim]")
+        for c in choices:
+            rprint(f"    [purple]{c.key}.[/purple] {c.label}")
 
 
 # ---------------------------------------------------------------------------
