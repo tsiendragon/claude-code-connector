@@ -21,18 +21,27 @@ Quick start::
 
 from claude_cli_connector.session import ClaudeSession
 from claude_cli_connector.manager import SessionManager
+from claude_cli_connector.parser import ChoiceItem, detect_choices, detect_ready
 from claude_cli_connector.exceptions import (
     ConnectorError,
     SessionNotFoundError,
+    SessionAlreadyExistsError,
     SessionTimeoutError,
     TransportError,
 )
 
 __all__ = [
+    # High-level session API
     "ClaudeSession",
     "SessionManager",
+    # Parser types (re-exported for convenience)
+    "ChoiceItem",
+    "detect_choices",
+    "detect_ready",
+    # Exceptions
     "ConnectorError",
     "SessionNotFoundError",
+    "SessionAlreadyExistsError",
     "SessionTimeoutError",
     "TransportError",
 ]

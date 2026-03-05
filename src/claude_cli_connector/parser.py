@@ -7,52 +7,48 @@ Two main responsibilities:
   1. ANSI / VT100 escape code stripping.
   2. "Ready detection" – determining whether Claude has finished its current
      response and is waiting for the next user input.
+  3. Choice menu detection – identifying interactive selection prompts.
 
-Ready detection is the trickiest part of the tmux-first approach.
-Claude CLI does not emit a machine-readable sentinel when it's done.
-We therefore rely on heuristic pattern matching + output stability.
-
-Strategy (layered, in order of confidence):
-  ① Prompt pattern:  Claude CLI shows a distinctive input prompt when idle,
-     e.g.  "> " or "Human: " at the bottom of the pane (high confidence).
-  ② Spinner/progress disappears:  During generation, Claude shows a spinner
-     or "Thinking…" indicator.  When it disappears, generation is likely done
-     (medium confidence).
-  ③ Output stability:  Capture the pane twice with a short delay.  If the
-     content is identical, Claude has stopped writing (low confidence, used
-     as a fallback after a minimum wait).
+Ready detection uses a layered heuristic strategy:
+  ① BUSY check:     spinner chars / "Thinking..." → definitely not ready
+  ② PROMPT check:   standalone "> " prompt pattern → definitely ready
+  ③ STABILITY check: pane content unchanged for N seconds → assume ready
 """
 
 from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Literal, Optional
 
 # ---------------------------------------------------------------------------
 # ANSI stripping
 # ---------------------------------------------------------------------------
 
-# Matches ESC + any terminal control sequence (CSI, OSC, etc.).
+# Matches ESC + any terminal control sequence (CSI, OSC, or single-byte Fe).
+#
+# IMPORTANT: CSI (\x1b[) and OSC (\x1b]) must come BEFORE the Fe catch-all
+# (\x1b + [@-Z\\-_]) because ] (0x5D) falls inside the Fe range \\-_ (0x5C-0x5F).
+# If the Fe branch ran first it would consume \x1b] and leave the OSC payload.
 _ANSI_RE = re.compile(
     r"""
-    \x1b          # ESC
+    \x1b                     # ESC
     (?:
-        [@-Z\\-_]              # Fe sequences (ESC + single byte)
-      | \[                     # CSI sequences: ESC [
-        [0-?]*                 #   parameter bytes
-        [ -/]*                 #   intermediate bytes
-        [@-~]                  #   final byte
-      | \]                     # OSC sequences: ESC ]
-        [^\x07\x1b]*           #   payload
-        (?:\x07|\x1b\\)        #   ST (BEL or ESC \)
+        \[                   # CSI — ESC [
+        [0-?]*               #   parameter bytes  (0x30-0x3F)
+        [ -/]*               #   intermediate bytes (0x20-0x2F)
+        [@-~]                #   final byte        (0x40-0x7E)
+      | \]                   # OSC — ESC ]
+        [^\x07\x1b]*         #   payload (anything except BEL or ESC)
+        (?:\x07|\x1b\\)      #   ST: BEL (0x07) or ESC \
+      | [@-Z\\^_]            # Fe single-byte sequences (0x40-0x5F), excluding [ and ]
     )
     """,
     re.VERBOSE,
 )
 
-# Also strip bare CR that are not part of CRLF (used by some terminal apps).
+# Strip bare CR (\r not followed by \n) – used by some terminal progress bars.
 _BARE_CR_RE = re.compile(r"\r(?!\n)")
 
 
@@ -72,35 +68,35 @@ def strip_ansi_lines(lines: list[str]) -> list[str]:
 # Claude CLI ready-state detection
 # ---------------------------------------------------------------------------
 
-# Patterns that indicate Claude's interactive input prompt is visible.
-# These are checked against the *last few lines* of the pane.
-#
-# Claude Code CLI (as of early 2025) shows a prompt that looks like:
-#   ╭─ Human
-#   ╰─> <cursor>
-# or a simpler "> " prompt depending on context / version.
+# Patterns that match a STANDALONE input prompt line (the idle cursor).
+# Checked against trimmed individual lines near the bottom of the pane.
 _PROMPT_PATTERNS: list[re.Pattern[str]] = [
-    # Arrow-style prompt: "> " or "╰─> " at line start
-    re.compile(r"^\s*[╰>─]+\s*>\s*$"),
-    re.compile(r"^\s*>\s*$"),
-    # Explicit "Human:" label that Claude Code uses
-    re.compile(r"^\s*Human\s*:?\s*$"),
-    # The input cursor placeholder (empty prompt line after Claude finishes)
-    re.compile(r"^\s*\?\s+.*$"),  # interactive prompt "? " (inquirer-style)
+    re.compile(r"^[╰>─]+\s*>?\s*$"),     # ">" / "╰─>" prompt
+    re.compile(r"^>\s*$"),                # bare ">"
+    re.compile(r"^Human\s*:?\s*$"),       # "Human:" label
+    re.compile(r"^\?\s+.+$"),            # inquirer-style "? ..." prompt
 ]
 
-# Patterns that indicate Claude is still actively generating.
+# Patterns indicating Claude is actively generating (present in tail lines).
 _BUSY_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]"),           # braille spinner characters
+    re.compile(r"[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]"),    # braille spinner
     re.compile(r"Thinking\.\.\."),
     re.compile(r"Generating"),
     re.compile(r"Working\.\.\."),
-    re.compile(r"●\s*$"),                        # solid dot spinner
-    re.compile(r"\bESC\b.*to interrupt"),        # "ESC to interrupt" hint
+    re.compile(r"●\s*$"),               # solid-dot spinner
+    re.compile(r"\bESC\b.*to interrupt"),
 ]
 
-# Number of trailing lines to check for prompt patterns.
+# How many trailing lines to inspect for prompt / busy patterns.
 _PROMPT_CHECK_LINES = 6
+
+
+def _is_prompt_line(line: str) -> bool:
+    """Return True if *line* (already ANSI-stripped) looks like an idle prompt."""
+    s = line.strip()
+    if not s:
+        return False
+    return any(p.fullmatch(s) for p in _PROMPT_PATTERNS)
 
 
 @dataclass
@@ -108,16 +104,9 @@ class ReadinessResult:
     """Result from a single call to :func:`detect_ready`."""
 
     is_ready: bool
-    """Whether Claude appears to be ready for the next input."""
-
-    confidence: str
-    """One of: ``'prompt'``, ``'stability'``, ``'timeout'``, ``'busy'``."""
-
+    confidence: Literal["prompt", "stability", "busy"]
     snapshot_text: str
-    """The cleaned pane text that was analysed."""
-
     elapsed: float
-    """Seconds elapsed since observation started."""
 
 
 def detect_ready(
@@ -133,83 +122,143 @@ def detect_ready(
     Parameters
     ----------
     lines:
-        Current pane lines (already ANSI-stripped).
+        Current pane lines (raw, ANSI will be stripped internally).
     prev_lines:
-        Pane lines from a previous capture (used for stability check).
+        Pane lines from a previous capture (for stability check).
     elapsed:
-        Seconds since we started waiting.
+        Seconds since we started polling.
     min_stable_secs:
-        Minimum time that must have passed before stability check is trusted.
-    stability_delay:
-        Gap between prev and current capture (used for context only).
-
-    Returns
-    -------
-    ReadinessResult
+        Minimum elapsed time before stability check is trusted.
     """
     clean = strip_ansi_lines(lines)
     snapshot_text = "\n".join(clean)
-
-    # ① Check for active generation indicators first (most reliable "not ready").
     tail = clean[-_PROMPT_CHECK_LINES:]
     tail_text = "\n".join(tail)
 
+    # ① BUSY: any spinner or progress indicator → definitely not ready.
     for bp in _BUSY_PATTERNS:
         if bp.search(tail_text):
             return ReadinessResult(
-                is_ready=False,
-                confidence="busy",
-                snapshot_text=snapshot_text,
-                elapsed=elapsed,
+                is_ready=False, confidence="busy",
+                snapshot_text=snapshot_text, elapsed=elapsed,
             )
 
-    # ② Check for prompt patterns in the last few lines.
+    # ② PROMPT: standalone idle-cursor line near the bottom → ready.
     for line in reversed(tail):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        for pp in _PROMPT_PATTERNS:
-            if pp.match(stripped):
-                return ReadinessResult(
-                    is_ready=True,
-                    confidence="prompt",
-                    snapshot_text=snapshot_text,
-                    elapsed=elapsed,
-                )
+        if _is_prompt_line(line):
+            return ReadinessResult(
+                is_ready=True, confidence="prompt",
+                snapshot_text=snapshot_text, elapsed=elapsed,
+            )
 
-    # ③ Stability check: if output hasn't changed since previous capture
-    #    and enough time has passed, assume generation is done.
+    # ③ STABILITY: unchanged content + enough time → assume ready.
     if prev_lines is not None and elapsed >= min_stable_secs:
         prev_clean = strip_ansi_lines(prev_lines)
         if clean == prev_clean:
             return ReadinessResult(
-                is_ready=True,
-                confidence="stability",
-                snapshot_text=snapshot_text,
-                elapsed=elapsed,
+                is_ready=True, confidence="stability",
+                snapshot_text=snapshot_text, elapsed=elapsed,
             )
 
     return ReadinessResult(
-        is_ready=False,
-        confidence="busy",
-        snapshot_text=snapshot_text,
-        elapsed=elapsed,
+        is_ready=False, confidence="busy",
+        snapshot_text=snapshot_text, elapsed=elapsed,
     )
 
 
 # ---------------------------------------------------------------------------
-# Output diffing helpers
+# Choice menu detection
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ChoiceItem:
+    """A single item in an interactive selection list."""
+
+    key: str
+    """The value to send to Claude to select this item (e.g. ``"1"``, ``"2"``)."""
+
+    label: str
+    """Human-readable option text."""
+
+    selected: bool = False
+    """True when the cursor is currently on this item (arrow-style menus)."""
+
+
+# Numbered list:  "1. some option"  or  "1) some option"
+_NUM_LIST_RE = re.compile(r"^\s*(\d+)[.)]\s+(.+)$")
+
+# Arrow cursor:   "❯ some option"  or  "> option"  or  "► option"
+_ARROW_RE = re.compile(r"^\s*[❯►▶>]\s+(.+)$")
+
+# Bullet items:   "○ option"  "● option"  "◉ option"  "◎ option"
+_BULLET_RE = re.compile(r"^\s*[○●◉◎✓✗•]\s+(.+)$")
+
+
+def detect_choices(lines: list[str]) -> list[ChoiceItem] | None:
+    """
+    Detect an interactive selection menu in the pane output.
+
+    Recognises two formats:
+
+    Numbered list::
+
+        1. claude-opus-4-5
+        2. claude-sonnet-4-5
+        3. claude-haiku-4-5
+
+    Arrow / bullet cursor (ink / inquirer TUI)::
+
+        ❯ claude-sonnet-4-5   ← selected
+          claude-opus-4-5
+          claude-haiku-4-5
+
+    Returns a list of :class:`ChoiceItem` when ≥ 2 choices are found,
+    or ``None`` if no selection menu is detected.
+    """
+    clean = strip_ansi_lines(lines)
+    tail = clean[-20:]   # inspect last 20 lines
+
+    # --- Try numbered list first (most common) ---
+    numbered: list[ChoiceItem] = []
+    for line in tail:
+        m = _NUM_LIST_RE.match(line)
+        if m:
+            numbered.append(ChoiceItem(key=m.group(1), label=m.group(2).strip()))
+    if len(numbered) >= 2:
+        return numbered
+
+    # --- Try arrow / bullet cursor style ---
+    cursor_items: list[ChoiceItem] = []
+    for line in tail:
+        ma = _ARROW_RE.match(line)
+        if ma:
+            cursor_items.append(ChoiceItem(
+                key=str(len(cursor_items) + 1),
+                label=ma.group(1).strip(),
+                selected=True,  # arrow line = current selection
+            ))
+            continue
+        mb = _BULLET_RE.match(line)
+        if mb:
+            cursor_items.append(ChoiceItem(
+                key=str(len(cursor_items) + 1),
+                label=mb.group(1).strip(),
+            ))
+
+    return cursor_items if len(cursor_items) >= 2 else None
+
+
+# ---------------------------------------------------------------------------
+# Output extraction helpers
 # ---------------------------------------------------------------------------
 
 def diff_output(before: list[str], after: list[str]) -> list[str]:
     """
-    Return the *new* lines that appeared in *after* compared to *before*.
+    Return the lines in *after* that are new compared to *before*.
 
-    This is a simple suffix-diff: find the longest common prefix and return
-    whatever follows it in *after*.  Works well for terminal output that only
-    ever appends.
+    Uses a simple longest-common-prefix diff – works well for terminal
+    output that only ever appends.
     """
-    # Find the common prefix length.
     common = 0
     for a, b in zip(before, after):
         if a == b:
@@ -219,31 +268,46 @@ def diff_output(before: list[str], after: list[str]) -> list[str]:
     return after[common:]
 
 
-def extract_last_response(lines: list[str], prompt_marker: str = "> ") -> str:
+def extract_last_response(lines: list[str]) -> str:
     """
     Extract the last assistant response from a full pane capture.
 
-    Looks for the last occurrence of *prompt_marker* and returns everything
-    between the line *before* that marker (exclusive) and the *current*
-    prompt marker (exclusive).
+    Strategy: find the last idle-prompt line, then collect all non-prompt,
+    non-user-input lines that appear *before* it (reading upward until we
+    hit another prompt or the top of the pane).
 
     This is a best-effort heuristic and may not be perfect across all
     Claude CLI versions.
     """
     clean = strip_ansi_lines(lines)
-    # Find all lines that look like an input prompt.
-    prompt_indices = [
-        i for i, line in enumerate(clean)
-        if line.strip().endswith(">") or line.strip() == ">"
-    ]
-    if len(prompt_indices) < 2:
-        # Can't find two prompts: return everything after the first prompt.
-        if prompt_indices:
-            return "\n".join(clean[prompt_indices[0] + 1:]).strip()
+
+    # Find indices of all idle-prompt lines.
+    prompt_idx = [i for i, ln in enumerate(clean) if _is_prompt_line(ln)]
+
+    if not prompt_idx:
+        # No prompt visible at all: return the whole pane.
         return "\n".join(clean).strip()
 
-    # The response is between the second-to-last and last prompt.
-    start = prompt_indices[-2] + 1
-    end = prompt_indices[-1]
-    response_lines = clean[start:end]
+    last_prompt = prompt_idx[-1]
+
+    if len(prompt_idx) >= 2:
+        # Response is the content between the second-to-last and last prompt.
+        start = prompt_idx[-2] + 1
+        response_lines = [
+            ln for ln in clean[start:last_prompt]
+            if not _is_prompt_line(ln)
+        ]
+    elif last_prompt < len(clean) - 1:
+        # Single prompt NOT at the end of the pane: the response comes after it
+        # (e.g. first capture right after the user's very first question).
+        response_lines = [
+            ln for ln in clean[last_prompt + 1:]
+            if not _is_prompt_line(ln)
+        ]
+    else:
+        # Single prompt at the end: response is everything before it.
+        response_lines = [
+            ln for ln in clean[:last_prompt]
+            if not _is_prompt_line(ln)
+        ]
     return "\n".join(response_lines).strip()

@@ -18,7 +18,13 @@ import time
 from typing import Optional
 
 from claude_cli_connector.exceptions import SessionTimeoutError, SessionNotFoundError
-from claude_cli_connector.parser import detect_ready, strip_ansi_lines, extract_last_response
+from claude_cli_connector.parser import (
+    detect_ready,
+    detect_choices,
+    strip_ansi_lines,
+    extract_last_response,
+    ChoiceItem,
+)
 from claude_cli_connector.store import SessionRecord, SessionStore, get_default_store
 from claude_cli_connector.transport import TmuxTransport
 
@@ -333,6 +339,24 @@ class ClaudeSession:
     # ------------------------------------------------------------------
     # Control operations
     # ------------------------------------------------------------------
+
+    def detect_choices(self) -> list[ChoiceItem] | None:
+        """
+        Check whether the current pane shows an interactive selection menu.
+
+        Returns a list of :class:`~parser.ChoiceItem` when Claude is presenting
+        choices (model selection, command confirmation, etc.), or ``None`` if
+        there is no active menu.
+
+        Example::
+
+            choices = session.detect_choices()
+            if choices:
+                # Auto-select the first option
+                session.send(choices[0].key)
+        """
+        snapshot = self._transport.capture()
+        return detect_choices(snapshot.lines)
 
     def interrupt(self) -> None:
         """Send Ctrl-C to the Claude CLI (cancel current operation)."""
