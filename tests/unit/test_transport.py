@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from claude_cli_connector.transport import TmuxTransport, SESSION_PREFIX
-from claude_cli_connector.exceptions import TransportError
+from claude_cli_connector.exceptions import SessionAlreadyExistsError, TransportError
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ class TestTmuxTransportCreate:
     def test_raises_if_session_already_exists(self, mock_server):
         mock_server.sessions.get.return_value = MagicMock()  # session exists
         with patch("shutil.which", return_value="/usr/bin/claude"):
-            with pytest.raises(TransportError, match="already exists"):
+            with pytest.raises(SessionAlreadyExistsError, match="already exists"):
                 TmuxTransport.create(name="test", cwd=".", server=mock_server)
 
     def test_creates_session_successfully(self, mock_server, mock_session):

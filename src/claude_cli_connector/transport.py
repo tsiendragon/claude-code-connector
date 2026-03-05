@@ -24,7 +24,7 @@ from typing import Optional
 
 import libtmux
 
-from claude_cli_connector.exceptions import TransportError
+from claude_cli_connector.exceptions import SessionAlreadyExistsError, TransportError
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ class TmuxTransport:
         # Fail fast if a session with this name already exists.
         existing = srv.sessions.get(session_name=full_name, default=None)
         if existing is not None:
-            raise TransportError(
+            raise SessionAlreadyExistsError(
                 f"tmux session '{full_name}' already exists. "
                 "Use TmuxTransport.attach() to reconnect."
             )
