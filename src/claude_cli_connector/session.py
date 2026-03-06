@@ -22,9 +22,11 @@ from claude_cli_connector.history import ConversationLogger
 from claude_cli_connector.parser import (
     detect_ready,
     detect_choices,
+    detect_permission,
     strip_ansi_lines,
     extract_last_response,
     ChoiceItem,
+    PermissionPrompt,
 )
 from claude_cli_connector.store import SessionRecord, SessionStore, get_default_store
 from claude_cli_connector.transport import TmuxTransport
@@ -106,6 +108,7 @@ class ClaudeSession:
         name: str,
         cwd: str = ".",
         command: str = "claude",
+        backend: str = "claude",
         startup_wait: float = DEFAULT_STARTUP_WAIT,
         store: Optional[SessionStore] = None,
         ready_timeout: float = DEFAULT_READY_TIMEOUT,
@@ -122,9 +125,11 @@ class ClaudeSession:
         cwd:
             Working directory (passed to tmux / Claude CLI).
         command:
-            The Claude CLI executable (default: ``"claude"``).
+            The CLI executable (default: ``"claude"``).
+        backend:
+            Backend type: ``"claude"`` or ``"cursor"`` (default: ``"claude"``).
         startup_wait:
-            Seconds to sleep after spawning to let Claude initialise.
+            Seconds to sleep after spawning to let the CLI initialise.
         store:
             Custom :class:`~store.SessionStore`.  Defaults to the process-
             level store (~/.local/share/claude-cli-connector/sessions.json).
@@ -137,6 +142,7 @@ class ClaudeSession:
             tmux_session_name=transport.tmux_session_name,
             cwd=cwd,
             command=command,
+            backend=backend,
         )
         _store.save(record)
 
@@ -287,6 +293,10 @@ class ClaudeSession:
 
         This is the primary method for interacting with Claude.
 
+        If a **permission prompt** is detected instead of a completed response,
+        ``send_and_wait`` returns a special string starting with
+        ``"[PERMISSION_REQUIRED]"`` so the caller can decide how to handle it.
+
         Parameters
         ----------
         text:
@@ -300,17 +310,49 @@ class ClaudeSession:
         Returns
         -------
         str
-            The assistant's response (best-effort extraction from pane text).
+            The assistant's response (best-effort extraction from pane text),
+            or a ``[PERMISSION_REQUIRED] ...`` string if a tool approval
+            prompt was detected.
         """
         # Capture state before sending so we can diff later.
         before_snapshot = self._transport.capture()
         before_lines = strip_ansi_lines(before_snapshot.lines)
 
         self.send(text)
-        full_text = self.wait_ready(timeout=timeout, initial_delay=initial_delay)
+
+        # Wait for the pane content to actually change after sending.
+        # This prevents wait_ready() from returning immediately if the
+        # old idle ❯ prompt is still visible before Claude starts processing.
+        _change_deadline = time.monotonic() + min(initial_delay + 5.0, timeout or self._ready_timeout)
+        time.sleep(initial_delay)
+        while time.monotonic() < _change_deadline:
+            snap = self._transport.capture()
+            current = strip_ansi_lines(snap.lines)
+            if current != before_lines:
+                break
+            time.sleep(0.2)
+
+        full_text = self.wait_ready(timeout=timeout, initial_delay=0.3)
 
         after_lines = strip_ansi_lines(self._last_lines)
-        response = extract_last_response(after_lines)
+        # Pass backend hint for accurate extraction.
+        record = self._store.get(self.name)
+        backend = record.backend if record else ""
+
+        # Check for a permission prompt — if detected, the "ready" state
+        # was actually a permission gate, not a completed response.
+        perm = detect_permission(after_lines, backend=backend)
+        if perm:
+            opts_str = ", ".join(
+                f"{o.key}={o.label}" for o in perm.options
+            )
+            return (
+                f"[PERMISSION_REQUIRED] {perm.tool}: {perm.action}\n"
+                f"Options: {opts_str}\n"
+                f"Use 'ccc approve {self.name}' to respond."
+            )
+
+        response = extract_last_response(after_lines, backend=backend)
 
         if self._history and response:
             self._history.log_assistant(response)

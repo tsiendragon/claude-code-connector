@@ -84,8 +84,9 @@ class TestSendAndWait:
     def test_normal_flow(self, session, mock_transport):
         mock_transport.capture.side_effect = [
             PaneSnapshot(["> "]),                   # before snapshot
-            PaneSnapshot(["⠋ Thinking..."]),        # busy
-            PaneSnapshot(["Claude: hi there", ">"]),# ready
+            PaneSnapshot(["❯ Hello"]),              # pane-change detection
+            PaneSnapshot(["⠋ Thinking..."]),        # busy (wait_ready)
+            PaneSnapshot(["Claude: hi there", ">"]),# ready (wait_ready)
         ]
         with patch("time.sleep"):
             resp = session.send_and_wait("Hello", initial_delay=0)
@@ -93,8 +94,9 @@ class TestSendAndWait:
 
     def test_sends_text_to_transport(self, session, mock_transport):
         mock_transport.capture.side_effect = [
-            PaneSnapshot([">"]),
-            PaneSnapshot(["answer", ">"]),
+            PaneSnapshot([">"]),              # before snapshot
+            PaneSnapshot(["❯ my question"]),  # pane-change detection
+            PaneSnapshot(["answer", ">"]),    # wait_ready
         ]
         with patch("time.sleep"):
             session.send_and_wait("my question", initial_delay=0)

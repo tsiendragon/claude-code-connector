@@ -300,7 +300,9 @@ class TmuxRelayAdapter(RelayAdapter):
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: self._session.send_and_wait(text, timeout=timeout),
+            lambda: self._session.send_and_wait(
+                text, timeout=timeout, initial_delay=2.0,
+            ),
         )
         return response, 0.0  # tmux mode doesn't report cost
 
@@ -466,22 +468,41 @@ class RelayOrchestrator:
         def _sanitize_tmux_name(name: str) -> str:
             return name.replace(" ", "_").replace("/", "_")
 
-        session_a = await loop.run_in_executor(
-            None,
-            lambda: ClaudeSession.create(
-                name=f"relay-{_sanitize_tmux_name(self.config.role_a.name)}",
+        def _create_and_wait(name: str) -> ClaudeSession:
+            """Create a session and wait for the Claude TUI to be ready.
+
+            The default ``startup_wait=2.0`` in ``ClaudeSession.create()``
+            is just a fixed sleep — it does NOT verify that the TUI has
+            actually loaded and is showing its ``❯`` prompt.  If Claude
+            takes longer to boot (common on first run or cold start), the
+            first ``send_and_wait()`` would send text to a terminal where
+            Claude hasn't loaded yet, resulting in an empty first response.
+
+            By calling ``wait_ready()`` here we guarantee the TUI is idle
+            and ready for input before the relay sends the first prompt.
+            """
+            session = ClaudeSession.create(
+                name=name,
                 cwd=self.config.cwd,
                 command=self.config.command,
+            )
+            logger.info("Waiting for Claude TUI '%s' to become ready...", name)
+            session.wait_ready(timeout=30, initial_delay=1.0)
+            logger.info("Claude TUI '%s' is ready.", name)
+            return session
+
+        session_a = await loop.run_in_executor(
+            None,
+            lambda: _create_and_wait(
+                f"relay-{_sanitize_tmux_name(self.config.role_a.name)}"
             ),
         )
         self.adapter_a = TmuxRelayAdapter(session_a)
 
         session_b = await loop.run_in_executor(
             None,
-            lambda: ClaudeSession.create(
-                name=f"relay-{_sanitize_tmux_name(self.config.role_b.name)}",
-                cwd=self.config.cwd,
-                command=self.config.command,
+            lambda: _create_and_wait(
+                f"relay-{_sanitize_tmux_name(self.config.role_b.name)}"
             ),
         )
         self.adapter_b = TmuxRelayAdapter(session_b)
