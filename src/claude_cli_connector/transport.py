@@ -237,7 +237,9 @@ class TmuxTransport:
         """Kill the tmux session (and the Claude CLI process inside it)."""
         if self._session is not None:
             try:
-                self._session.kill_session()
+                # libtmux ≥0.30 renamed kill_session() → kill()
+                _kill = getattr(self._session, "kill", None) or self._session.kill_session
+                _kill()
                 logger.debug("Killed tmux session '%s'", self._tmux_session_name)
             except Exception as exc:
                 raise TransportError(f"kill_session failed: {exc}") from exc
