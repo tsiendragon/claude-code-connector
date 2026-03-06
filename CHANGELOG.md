@@ -5,9 +5,34 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.2.0] — 2026-03-06
+
+### Added — Multi-transport architecture
+- **`transport_base.py`** — Abstract `BaseTransport` base class, `Message`,
+  `TransportEvent`, and `TransportMode` enum (`tmux`, `stream-json`, `sdk`, `acp`).
+- **`transport_stream.py`** — `StreamJsonTransport` using `claude -p
+  --output-format stream-json --input-format stream-json` for structured
+  bidirectional communication via subprocess stdin/stdout.  Supports sync
+  (`send_and_collect`) and async (`async_send_and_collect`) APIs, NDJSON
+  event iteration, content-block deltas, and agent SDK stream events.
+- **`transport_sdk.py`** — `SdkTransport` wrapping the official
+  `claude-agent-sdk` Python package.  Provides `connect()`, `disconnect()`,
+  `receive_messages()`, and `send_and_collect()`.
+  *⚠ NOT TESTED — requires `ANTHROPIC_API_KEY` and `pip install claude-agent-sdk`.*
+- **`transport_acp.py`** — `AcpTransport` implementing ACP (Agent Client
+  Protocol) JSON-RPC 2.0 over stdio.  Spawns `claude-agent-acp` subprocess,
+  manages sessions via `agent/newSession` / `agent/prompt` / `agent/cancel`.
+  *⚠ NOT TESTED — requires `ANTHROPIC_API_KEY` and `claude-agent-acp` binary.*
+  Reference: [zed-industries/claude-agent-acp](https://github.com/zed-industries/claude-agent-acp).
+- **CLI `ccc stream`** — One-shot stream-json query command.
+  `ccc stream "prompt" --cwd . --tools Bash,Read --raw` for scripts & CI/CD.
+- **Optional `sdk` extra** — `pip install claude-cli-connector[sdk]` installs
+  `claude-agent-sdk`.
+- 50 new unit tests covering all three new transports (137 total).
 
 ### Fixed
+- `TmuxTransport.create()` now raises `SessionAlreadyExistsError` (not
+  `TransportError`) when a duplicate session is detected.
 - `libtmux` compatibility: replaced removed `Server.find_where()` with
   `srv.sessions.get(session_name=..., default=None)` (breaking change in 0.17).
 - `capture_pane(start=0, end=-1)` silently returned `[]` in libtmux ≥ 0.17;

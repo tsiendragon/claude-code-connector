@@ -3,16 +3,20 @@ cli.py
 ------
 Typer-based CLI entry point.  Installed as the ``ccc`` command.
 
-Commands
---------
+Commands (tmux mode — default)
+------------------------------
   ccc run       <name> [--cwd DIR] [--cmd STR]   Start a new Claude session
   ccc attach    <name>                            Attach to an existing session
   ccc send      <name> <message>                  Send a message and print response
   ccc tail      <name> [--lines N]                Print last N lines of pane
-  ccc status    <name> [--porcelain]              Show session state (thinking/ready/dead)
+  ccc status    <name> [--porcelain]              Show session state
   ccc ps                                          List all known sessions
   ccc kill      <name>                            Kill a session
   ccc interrupt <name>                            Send Ctrl-C to a session
+
+Commands (stream-json mode)
+---------------------------
+  ccc stream    <prompt> [--cwd DIR] [--tools ...]  One-shot stream-json query
 """
 
 from __future__ import annotations
@@ -46,7 +50,7 @@ def _bail(msg: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# run
+# run  (tmux mode)
 # ---------------------------------------------------------------------------
 
 @app.command()
@@ -88,7 +92,7 @@ def attach(
 
 
 # ---------------------------------------------------------------------------
-# send
+# send  (tmux mode)
 # ---------------------------------------------------------------------------
 
 @app.command()
@@ -259,6 +263,74 @@ def interrupt(
         rprint(f"[yellow]⚡[/yellow] Interrupted session [bold]{name}[/bold].")
     except ConnectorError as exc:
         _bail(str(exc))
+
+
+# ---------------------------------------------------------------------------
+# stream  (stream-json mode — one-shot)
+# ---------------------------------------------------------------------------
+
+@app.command()
+def stream(
+    prompt: Annotated[str, typer.Argument(help="Prompt to send to Claude")],
+    cwd: Annotated[str, typer.Option("--cwd", "-d", help="Working directory")] = ".",
+    command: Annotated[str, typer.Option("--cmd", help="Claude CLI executable")] = "claude",
+    tools: Annotated[Optional[str], typer.Option("--tools", "-t", help="Comma-separated allowed tools")] = None,
+    model: Annotated[Optional[str], typer.Option("--model", "-m", help="Model name")] = None,
+    timeout: Annotated[float, typer.Option(help="Max seconds to wait")] = 300.0,
+    raw: Annotated[bool, typer.Option("--raw", help="Print raw JSON events")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Verbose output")] = True,
+) -> None:
+    """
+    One-shot query using stream-json mode (structured output).
+
+    This uses ``claude -p --output-format stream-json`` for programmatic
+    access without tmux.  Ideal for scripts, CI/CD, and automation.
+
+    Example:
+        ccc stream "Explain this codebase" --cwd /my/project --tools Bash,Read
+    """
+    from claude_cli_connector.transport_stream import StreamJsonTransport
+
+    allowed = tools.split(",") if tools else []
+
+    transport = StreamJsonTransport(
+        _name="ccc-stream",
+        _cwd=cwd,
+        _command=command,
+        _allowed_tools=allowed,
+        _model=model or "",
+        _verbose=verbose,
+    )
+
+    try:
+        transport.start()
+        rprint(f"[dim]Stream-JSON mode → sending prompt…[/dim]")
+
+        if raw:
+            # Raw mode: print each JSON event
+            import json
+            transport.send(prompt)
+            for evt in transport.iter_events(timeout=timeout):
+                console.print_json(json.dumps(evt.data))
+                if evt.type in ("result", "eof"):
+                    break
+        else:
+            msg = transport.send_and_collect(prompt, timeout=timeout)
+            if msg.content:
+                console.print(msg.content)
+            else:
+                rprint("[dim]No text content in response.[/dim]")
+
+            if msg.session_id:
+                rprint(f"\n[dim]session: {msg.session_id}[/dim]")
+            if msg.cost_usd > 0:
+                rprint(f"[dim]cost: ${msg.cost_usd:.4f}[/dim]")
+    except ConnectorError as exc:
+        _bail(str(exc))
+    except KeyboardInterrupt:
+        rprint("\n[yellow]Interrupted.[/yellow]")
+    finally:
+        transport.kill()
 
 
 # ---------------------------------------------------------------------------

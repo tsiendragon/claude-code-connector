@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-cli-connector"
-version = "0.1.0"
-description = "Low-level Python connector for interacting with a running Claude Code CLI via tmux"
+version = "0.2.0"
+description = "Python connector for Claude Code CLI — supports tmux, stream-json, SDK, and ACP transport modes"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Lilong Qian", email = "lilong.qian@okg.com" }]
-keywords = ["claude", "claude-code", "tmux", "cli", "connector", "ai"]
+keywords = ["claude", "claude-code", "tmux", "cli", "connector", "ai", "stream-json", "sdk", "acp", "agent"]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -36,6 +36,9 @@ Repository = "https://github.com/qianyilong/claude-cli-connector"
 "Bug Tracker" = "https://github.com/qianyilong/claude-cli-connector/issues"
 
 [project.optional-dependencies]
+sdk = [
+  "claude-agent-sdk>=0.2.0",
+]
 dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
