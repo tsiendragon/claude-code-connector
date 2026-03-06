@@ -463,13 +463,15 @@ class RelayOrchestrator:
 
         loop = asyncio.get_event_loop()
 
+        def _sanitize_tmux_name(name: str) -> str:
+            return name.replace(" ", "_").replace("/", "_")
+
         session_a = await loop.run_in_executor(
             None,
             lambda: ClaudeSession.create(
-                name=f"relay-{self.config.role_a.name}",
+                name=f"relay-{_sanitize_tmux_name(self.config.role_a.name)}",
                 cwd=self.config.cwd,
                 command=self.config.command,
-                enable_history=False,
             ),
         )
         self.adapter_a = TmuxRelayAdapter(session_a)
@@ -477,10 +479,9 @@ class RelayOrchestrator:
         session_b = await loop.run_in_executor(
             None,
             lambda: ClaudeSession.create(
-                name=f"relay-{self.config.role_b.name}",
+                name=f"relay-{_sanitize_tmux_name(self.config.role_b.name)}",
                 cwd=self.config.cwd,
                 command=self.config.command,
-                enable_history=False,
             ),
         )
         self.adapter_b = TmuxRelayAdapter(session_b)
