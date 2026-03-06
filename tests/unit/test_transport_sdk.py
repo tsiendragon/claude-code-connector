@@ -33,9 +33,26 @@ class TestSdkTransport:
         assert "sdk" in r
 
     def test_import_sdk_raises_when_not_installed(self):
-        """claude-agent-sdk is not installed in dev, so this should raise."""
-        with pytest.raises(TransportError, match="claude-agent-sdk is not installed"):
-            _import_sdk()
+        """Simulate claude-agent-sdk missing by blocking the import."""
+        import sys
+        import unittest.mock as mock
+        import builtins
+        real_import = builtins.__import__
+
+        def _blocked_import(name, *args, **kwargs):
+            if name == "claude_agent_sdk":
+                raise ImportError("mocked")
+            return real_import(name, *args, **kwargs)
+
+        # Remove cached module if present so _import_sdk re-triggers import
+        saved = sys.modules.pop("claude_agent_sdk", None)
+        try:
+            with mock.patch("builtins.__import__", side_effect=_blocked_import):
+                with pytest.raises(TransportError, match="claude-agent-sdk is not installed"):
+                    _import_sdk()
+        finally:
+            if saved is not None:
+                sys.modules["claude_agent_sdk"] = saved
 
     def test_send_without_connect_raises(self):
         t = SdkTransport(_name="test")
