@@ -332,7 +332,7 @@ class ClaudeSession:
                 break
             time.sleep(0.2)
 
-        full_text = self.wait_ready(timeout=timeout, initial_delay=0.3)
+        full_text = self.wait_ready(timeout=timeout, initial_delay=1.5)
 
         after_lines = strip_ansi_lines(self._last_lines)
         # Pass backend hint for accurate extraction.

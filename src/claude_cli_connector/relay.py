@@ -485,6 +485,7 @@ class RelayOrchestrator:
                 name=name,
                 cwd=self.config.cwd,
                 command=self.config.command,
+                stable_secs=5.0,
             )
             logger.info("Waiting for Claude TUI '%s' to become ready...", name)
             session.wait_ready(timeout=30, initial_delay=1.0)
