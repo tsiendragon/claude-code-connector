@@ -165,6 +165,30 @@ class TestStreamJsonRelayAdapter:
         adapter = StreamJsonRelayAdapter(name="test-session")
         adapter.kill()  # should not raise
 
+    def test_build_command_basic(self):
+        adapter = StreamJsonRelayAdapter(name="test")
+        cmd = adapter._build_command()
+        assert cmd[0] == "claude"
+        assert "-p" in cmd
+        assert "--output-format" in cmd
+        assert "json" in cmd
+        # Should NOT include stream-json or --verbose
+        assert "stream-json" not in cmd
+
+    def test_build_command_with_tools_and_model(self):
+        adapter = StreamJsonRelayAdapter(
+            name="test",
+            allowed_tools=["Bash", "Read"],
+            model="claude-sonnet-4-5-20250929",
+            system_prompt="Be helpful",
+        )
+        cmd = adapter._build_command()
+        assert "--allowedTools" in cmd
+        idx = cmd.index("--allowedTools")
+        assert cmd[idx + 1] == "Bash,Read"
+        assert "--model" in cmd
+        assert "--append-system-prompt" in cmd
+
 
 class TestTmuxRelayAdapter:
     def test_adapter_name(self):

@@ -158,11 +158,13 @@ class RelayAdapter(ABC):
 
 
 class StreamJsonRelayAdapter(RelayAdapter):
-    """Wraps :class:`StreamJsonTransport` for relay use.
+    """One-shot ``claude -p --output-format json`` adapter for relay use.
 
     Since ``claude -p`` is one-shot (the process exits after responding),
     this adapter spawns a **fresh process** for every ``send_and_wait``
-    call and tears it down afterwards.
+    call.  It uses ``--output-format json`` (not ``stream-json``) for
+    maximum compatibility — the complete JSON response is read once the
+    process exits.
     """
 
     def __init__(
@@ -183,43 +185,105 @@ class StreamJsonRelayAdapter(RelayAdapter):
         self._system_prompt = system_prompt
         self._model = model
         self._verbose = verbose
-        self._last_transport: Any = None  # for kill()
+        self._last_process: Any = None  # for kill()
+
+    def _build_command(self) -> list[str]:
+        """Build the ``claude -p --output-format json`` command."""
+        cmd = [self._command, "-p", "--output-format", "json"]
+        if self._allowed_tools:
+            cmd.extend(["--allowedTools", ",".join(self._allowed_tools)])
+        if self._model:
+            cmd.extend(["--model", self._model])
+        if self._system_prompt:
+            cmd.extend(["--append-system-prompt", self._system_prompt])
+        return cmd
 
     async def send_and_wait(self, text: str, timeout: float) -> tuple[str, float]:
-        from claude_cli_connector.transport_stream import StreamJsonTransport
+        import json as _json
+        import subprocess as _sp
 
-        transport = StreamJsonTransport(
-            _name=self._name,
-            _cwd=self._cwd,
-            _command=self._command,
-            _allowed_tools=self._allowed_tools,
-            _system_prompt=self._system_prompt,
-            _model=self._model,
-            _verbose=self._verbose,
-            _enable_history=False,
+        cmd = self._build_command()
+        logger.debug("RelayAdapter(%s): running %s", self._name, " ".join(cmd))
+
+        proc = _sp.Popen(
+            cmd,
+            stdin=_sp.PIPE,
+            stdout=_sp.PIPE,
+            stderr=_sp.PIPE,
+            cwd=self._cwd,
+            text=True,
         )
-        transport.start()
-        self._last_transport = transport
+        self._last_process = proc
 
         try:
-            msg = await transport.async_send_and_collect(text, timeout=timeout)
-            return msg.content, msg.cost_usd
-        finally:
-            try:
-                transport.kill()
-            except Exception:
-                pass
+            # Write prompt as plain text to stdin, then close (EOF)
+            stdout, stderr = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, lambda: proc.communicate(input=text, timeout=timeout)
+                ),
+                timeout=timeout + 5,
+            )
+        except (asyncio.TimeoutError, _sp.TimeoutExpired):
+            proc.kill()
+            proc.wait(timeout=5)
+            raise TransportError(f"RelayAdapter({self._name}): timeout after {timeout}s")
+
+        if stderr and stderr.strip():
+            logger.debug("RelayAdapter(%s) stderr: %s", self._name, stderr.strip()[:500])
+
+        if proc.returncode != 0:
+            logger.warning(
+                "RelayAdapter(%s): claude exited with code %d. stderr: %s",
+                self._name, proc.returncode, stderr.strip()[:500],
+            )
+
+        # Parse JSON output
+        stdout = stdout.strip()
+        if not stdout:
+            logger.warning("RelayAdapter(%s): empty stdout", self._name)
+            return "", 0.0
+
+        try:
+            data = _json.loads(stdout)
+        except _json.JSONDecodeError:
+            # Fallback: treat entire stdout as plain text
+            logger.debug("RelayAdapter(%s): non-JSON output, using as plain text", self._name)
+            return stdout, 0.0
+
+        # Extract text from JSON response
+        # Format: {"type": "result", "result": "...", "cost_usd": 0.01, ...}
+        # Or:     {"role": "assistant", "content": [{"type": "text", "text": "..."}]}
+        content = ""
+        cost = 0.0
+
+        if isinstance(data, dict):
+            # Try "result" field first (standard --output-format json)
+            if data.get("result"):
+                content = data["result"]
+            # Try content blocks
+            elif data.get("content"):
+                blocks = data["content"]
+                if isinstance(blocks, list):
+                    content = "\n".join(
+                        b.get("text", "") for b in blocks if b.get("type") == "text"
+                    )
+                elif isinstance(blocks, str):
+                    content = blocks
+            cost = data.get("cost_usd", 0.0) or 0.0
+
+        return content.strip(), cost
 
     def is_alive(self) -> bool:
-        return self._last_transport is not None and self._last_transport.is_alive()
+        return self._last_process is not None and self._last_process.poll() is None
 
     def kill(self) -> None:
-        if self._last_transport is not None:
+        if self._last_process is not None:
             try:
-                self._last_transport.kill()
+                self._last_process.kill()
+                self._last_process.wait(timeout=5)
             except Exception:
                 pass
-            self._last_transport = None
+            self._last_process = None
 
     @property
     def adapter_name(self) -> str:
