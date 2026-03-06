@@ -5,6 +5,7 @@ from claude_cli_connector.parser import (
     strip_ansi,
     strip_ansi_lines,
     detect_ready,
+    detect_choices,
     extract_last_response,
     diff_output,
 )
@@ -137,3 +138,80 @@ class TestDiffOutput:
     def test_empty_before(self):
         after = ["x", "y"]
         assert diff_output([], after) == ["x", "y"]
+
+
+# ---------------------------------------------------------------------------
+# detect_choices
+# ---------------------------------------------------------------------------
+
+class TestDetectChoices:
+    def test_real_numbered_menu_from_1(self):
+        """A proper choice menu starting from 1 should be detected."""
+        lines = [
+            "Select a model:",
+            "1. claude-opus-4-5",
+            "2. claude-sonnet-4-5",
+            "3. claude-haiku-4-5",
+        ]
+        choices = detect_choices(lines)
+        assert choices is not None
+        assert len(choices) == 3
+        assert choices[0].key == "1"
+        assert choices[0].label == "claude-opus-4-5"
+
+    def test_numbered_list_not_starting_from_1_rejected(self):
+        """Items like '4. ...' and '5. ...' in a response are NOT a menu."""
+        lines = [
+            "Here are some options:",
+            "3. Use environment variable",
+            "4. Use script to log the session",
+            "5. Pipe through tee",
+        ]
+        choices = detect_choices(lines)
+        assert choices is None
+
+    def test_single_item_rejected(self):
+        lines = ["1. Only one item"]
+        assert detect_choices(lines) is None
+
+    def test_arrow_cursor_menu(self):
+        lines = [
+            "❯ claude-sonnet-4-5",
+            "○ claude-opus-4-5",
+            "○ claude-haiku-4-5",
+        ]
+        choices = detect_choices(lines)
+        assert choices is not None
+        assert len(choices) == 3
+        assert choices[0].selected is True
+
+    def test_scattered_numbered_items_rejected(self):
+        """Numbered items separated by other text are not a menu."""
+        lines = [
+            "1. First approach — use raw sockets",
+            "This is good for performance.",
+            "",
+            "2. Second approach — use HTTP",
+            "This is good for compatibility.",
+        ]
+        # The contiguous block logic should capture them separately;
+        # the last contiguous block is just "2. ..." which is < 2 items.
+        choices = detect_choices(lines)
+        assert choices is None
+
+    def test_contiguous_block_from_1(self):
+        """Only the last contiguous block is used, and must start from 1."""
+        lines = [
+            "Some text here",
+            "More text",
+            "1. Option A",
+            "2. Option B",
+            "3. Option C",
+        ]
+        choices = detect_choices(lines)
+        assert choices is not None
+        assert len(choices) == 3
+
+    def test_empty_lines_returns_none(self):
+        assert detect_choices([]) is None
+        assert detect_choices(["", "", ""]) is None

@@ -73,9 +73,30 @@ def strip_ansi_lines(lines: list[str]) -> list[str]:
 _PROMPT_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"^[╰>─]+\s*>?\s*$"),     # ">" / "╰─>" prompt
     re.compile(r"^>\s*$"),                # bare ">"
+    re.compile(r"^❯\s*$"),               # bare "❯" (Claude Code CLI idle prompt)
     re.compile(r"^Human\s*:?\s*$"),       # "Human:" label
     re.compile(r"^\?\s+.+$"),            # inquirer-style "? ..." prompt
+    re.compile(r"→\s*Add a follow-up"),  # Cursor Agent idle prompt
 ]
+
+# Pattern that matches a user-input line: "❯ <text>" (Claude Code CLI).
+_USER_INPUT_RE = re.compile(r"^❯\s+.+$")
+
+# Pattern for Claude response marker: "⏺" (Claude Code CLI).
+_RESPONSE_MARKER_RE = re.compile(r"^⏺\s*")
+
+# Separator line (the horizontal rules in Claude Code CLI).
+_SEPARATOR_RE = re.compile(r"^[─━═▪\s]{10,}$")
+
+# --- Cursor Agent patterns ---
+# Input box top/bottom borders: ┌───...───┐ / └───...───┘
+_CURSOR_BOX_RE = re.compile(r"^[┌└][─┐┘\s]+$")
+# The idle prompt inside the input box: "→ Add a follow-up"
+_CURSOR_FOLLOWUP_RE = re.compile(r"→\s*Add a follow-up")
+# Cursor header line: "Cursor Agent v..."
+_CURSOR_HEADER_RE = re.compile(r"^\s*Cursor Agent\s+v")
+# Cursor footer: "/ commands · @ files · ! shell" or model info
+_CURSOR_FOOTER_RE = re.compile(r"^\s*(/\s*commands|Claude\s+\d|[○●]\s)")
 
 # Patterns indicating Claude is actively generating (present in tail lines).
 _BUSY_PATTERNS: list[re.Pattern[str]] = [
@@ -219,12 +240,25 @@ def detect_choices(lines: list[str]) -> list[ChoiceItem] | None:
     tail = clean[-20:]   # inspect last 20 lines
 
     # --- Try numbered list first (most common) ---
+    # Real choice menus (model picker, tool selector) are always a contiguous
+    # block of items numbered sequentially from 1.  A numbered list in Claude's
+    # response text (e.g. "4. Use script …  5. Pipe through tee") should NOT
+    # be detected as a choice menu.
     numbered: list[ChoiceItem] = []
+    numbered_block: list[ChoiceItem] = []
     for line in tail:
         m = _NUM_LIST_RE.match(line)
         if m:
-            numbered.append(ChoiceItem(key=m.group(1), label=m.group(2).strip()))
-    if len(numbered) >= 2:
+            numbered_block.append(ChoiceItem(key=m.group(1), label=m.group(2).strip()))
+        else:
+            if numbered_block:
+                numbered = numbered_block
+                numbered_block = []
+    if numbered_block:
+        numbered = numbered_block
+
+    # Accept only if ≥2 items and first item starts at "1"
+    if len(numbered) >= 2 and numbered[0].key == "1":
         return numbered
 
     # --- Try arrow / bullet cursor style (consecutive lines only) ---
@@ -281,44 +315,202 @@ def diff_output(before: list[str], after: list[str]) -> list[str]:
     return after[common:]
 
 
-def extract_last_response(lines: list[str]) -> str:
+def _extract_cursor_response(clean: list[str]) -> str | None:
+    """
+    Extract the last response from Cursor Agent pane output.
+
+    Cursor Agent format::
+
+        Cursor Agent v2026.02.27-e7d2ef6
+        ~/path/to/project · main
+
+        what is the date today              ← user input (text block)
+
+        Today is Friday, March 6, 2026.    ← response (text block)
+
+        ┌───────────────────────────────┐
+        │ → Add a follow-up             │   ← idle input box
+        └───────────────────────────────┘
+        Claude 4.6 Opus (Thinking) · 7.5%  ← footer
+        / commands · @ files · ! shell
+
+    Strategy: find the ``→ Add a follow-up`` input box, then walk upward
+    to collect text blocks.  The conversation is a sequence of text blocks
+    separated by blank lines.  The last block before the input box is the
+    response; the one before that is the user input.
+    """
+    # Find the input box region.
+    followup_idx = None
+    for i in range(len(clean) - 1, -1, -1):
+        if _CURSOR_FOLLOWUP_RE.search(clean[i]):
+            followup_idx = i
+            break
+
+    if followup_idx is None:
+        return None
+
+    # Find the top border of the input box (┌───).
+    box_top = followup_idx
+    for i in range(followup_idx - 1, max(followup_idx - 5, -1), -1):
+        if _CURSOR_BOX_RE.match(clean[i].strip()):
+            box_top = i
+            break
+
+    # Collect content above the box, split into text blocks by blank lines.
+    content_lines = clean[:box_top]
+
+    # Split into blocks (non-empty line groups separated by blank lines).
+    blocks: list[list[str]] = []
+    current_block: list[str] = []
+    for ln in content_lines:
+        if ln.strip():
+            current_block.append(ln)
+        else:
+            if current_block:
+                blocks.append(current_block)
+                current_block = []
+    if current_block:
+        blocks.append(current_block)
+
+    if not blocks:
+        return None
+
+    # Filter out the header block (starts with "Cursor Agent v..." or path info).
+    filtered: list[list[str]] = []
+    for block in blocks:
+        first = block[0].strip()
+        if _CURSOR_HEADER_RE.match(first):
+            continue
+        # Skip path lines like "~/path · branch"
+        if first.startswith("~/") or first.startswith("/"):
+            continue
+        filtered.append(block)
+
+    if not filtered:
+        return None
+
+    # The last block is the response.
+    response_block = filtered[-1]
+    return "\n".join(response_block).strip()
+
+
+def extract_last_response(lines: list[str], backend: str = "") -> str:
     """
     Extract the last assistant response from a full pane capture.
 
-    Strategy: find the last idle-prompt line, then collect all non-prompt,
-    non-user-input lines that appear *before* it (reading upward until we
-    hit another prompt or the top of the pane).
+    Parameters
+    ----------
+    lines:
+        Pane content (raw or ANSI-stripped).
+    backend:
+        Optional hint: ``"cursor"`` to use Cursor-specific extraction,
+        ``"claude"`` for Claude Code CLI extraction, or ``""`` (default)
+        for auto-detection across all strategies.
+
+    Supports three formats:
+
+    **Claude Code CLI (v2+)** — identified by ``❯`` prompts and ``⏺`` markers::
+
+        ❯ user question here
+        ⏺ Claude's response...
+        ❯                          ← idle prompt
+
+    **Cursor Agent** — identified by ``→ Add a follow-up`` input box::
+
+        what is the date today
+        Today is Friday, March 6, 2026.
+        ┌──────────────────────────┐
+        │ → Add a follow-up        │
+        └──────────────────────────┘
+
+    **Legacy / generic** — identified by ``>`` or ``╰─>`` prompts::
+
+        > user input
+        response text
+        >                          ← idle prompt
 
     This is a best-effort heuristic and may not be perfect across all
-    Claude CLI versions.
+    CLI versions.
     """
     clean = strip_ansi_lines(lines)
 
-    # Find indices of all idle-prompt lines.
+    # --- Backend-specific extraction ---
+    if backend == "cursor":
+        cursor_result = _extract_cursor_response(clean)
+        if cursor_result:
+            return cursor_result
+        # Fallback: return everything above the input box as-is.
+        return "\n".join(clean).strip()
+
+    if backend == "claude":
+        # Skip Cursor strategy, go straight to Claude Code CLI.
+        pass
+    else:
+        # Auto-detect: try Cursor first.
+        cursor_result = _extract_cursor_response(clean)
+        if cursor_result:
+            return cursor_result
+
+    # --- Strategy 1: Claude Code CLI format (❯ / ⏺ markers) ---
+    # Walk backward from the end to find the idle ❯ prompt, then find
+    # the preceding user-input line (❯ <text>).  Everything between
+    # them (excluding user-input, separators, and the idle prompt) is
+    # the response.
+    last_idle = None
+    for i in range(len(clean) - 1, -1, -1):
+        s = clean[i].strip()
+        if s == "❯" or s == "":
+            if s == "❯":
+                last_idle = i
+                break
+        elif _SEPARATOR_RE.fullmatch(s) or s == "? for shortcuts":
+            continue
+        else:
+            break
+
+    if last_idle is not None:
+        # Find the preceding user-input line: "❯ <text>"
+        user_input_idx = None
+        for i in range(last_idle - 1, -1, -1):
+            s = clean[i].strip()
+            if _USER_INPUT_RE.fullmatch(s):
+                user_input_idx = i
+                break
+
+        if user_input_idx is not None:
+            # Collect response lines between user input and idle prompt.
+            response_lines = []
+            for ln in clean[user_input_idx + 1 : last_idle]:
+                s = ln.strip()
+                # Skip separator lines, "? for shortcuts", empty lines at boundaries
+                if _SEPARATOR_RE.fullmatch(s):
+                    continue
+                response_lines.append(ln)
+
+            result = "\n".join(response_lines).strip()
+            if result:
+                return result
+
+    # --- Strategy 2: Legacy / generic prompt-based extraction ---
     prompt_idx = [i for i, ln in enumerate(clean) if _is_prompt_line(ln)]
 
     if not prompt_idx:
-        # No prompt visible at all: return the whole pane.
         return "\n".join(clean).strip()
 
     last_prompt = prompt_idx[-1]
 
     if len(prompt_idx) >= 2:
-        # Response is the content between the second-to-last and last prompt.
         start = prompt_idx[-2] + 1
         response_lines = [
             ln for ln in clean[start:last_prompt]
             if not _is_prompt_line(ln)
         ]
     elif last_prompt < len(clean) - 1:
-        # Single prompt NOT at the end of the pane: the response comes after it
-        # (e.g. first capture right after the user's very first question).
         response_lines = [
             ln for ln in clean[last_prompt + 1:]
             if not _is_prompt_line(ln)
         ]
     else:
-        # Single prompt at the end: response is everything before it.
         response_lines = [
             ln for ln in clean[:last_prompt]
             if not _is_prompt_line(ln)
