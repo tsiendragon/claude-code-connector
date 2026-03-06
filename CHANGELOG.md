@@ -7,6 +7,21 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [0.2.0] — 2026-03-06
 
+### Added — Claude-to-Claude relay
+- **`relay.py`** — `RelayOrchestrator` manages two Claude instances talking to
+  each other.  Two modes: **debate** (free discussion with roles/personas) and
+  **collab** (developer writes, reviewer reviews, iterate until LGTM).
+- `RelayConfig`, `RelayRole`, `RelayMode`, `RelayTurn`, `RelayResult` data
+  models.  Transport-agnostic via `RelayAdapter` / `StreamJsonRelayAdapter` /
+  `TmuxRelayAdapter`.
+- **CLI `ccc relay debate`** — Start a debate between two Claude instances.
+  `ccc relay debate "topic" --role-a Name --role-b Name --rounds N`
+- **CLI `ccc relay collab`** — Code collaboration relay.
+  `ccc relay collab "task" --dev Dev --reviewer Rev --rounds N`
+- Relay history logged as JSONL under `relay-debate/` and `relay-collab/`
+  session names, viewable via `ccc history`.
+- 24 new unit tests for relay module (184 total).
+
 ### Added — Multi-transport architecture
 - **`transport_base.py`** — Abstract `BaseTransport` base class, `Message`,
   `TransportEvent`, and `TransportMode` enum (`tmux`, `stream-json`, `sdk`, `acp`).

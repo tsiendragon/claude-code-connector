@@ -54,6 +54,16 @@ from claude_cli_connector.transport_acp import AcpTransport
 # History
 from claude_cli_connector.history import ConversationLogger, HistoryEntry
 
+# Relay
+from claude_cli_connector.relay import (
+    RelayOrchestrator,
+    RelayConfig,
+    RelayRole,
+    RelayMode,
+    RelayResult,
+    RelayTurn,
+)
+
 # Exceptions
 from claude_cli_connector.exceptions import (
     ConnectorError,
@@ -79,6 +89,13 @@ __all__ = [
     # History
     "ConversationLogger",
     "HistoryEntry",
+    # Relay
+    "RelayOrchestrator",
+    "RelayConfig",
+    "RelayRole",
+    "RelayMode",
+    "RelayResult",
+    "RelayTurn",
     # Parser types (re-exported for convenience)
     "ChoiceItem",
     "detect_choices",

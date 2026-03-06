@@ -433,6 +433,175 @@ def stream(
 
 
 # ---------------------------------------------------------------------------
+# relay  (Claude-to-Claude)
+# ---------------------------------------------------------------------------
+
+relay_app = typer.Typer(
+    help="Relay two Claude instances — debate or collaborate.",
+)
+app.add_typer(relay_app, name="relay")
+
+
+@relay_app.command()
+def debate(
+    topic: Annotated[str, typer.Argument(help="Topic for debate")],
+    role_a: Annotated[str, typer.Option("--role-a", "-a", help="Name for first Claude")] = "Position A",
+    role_b: Annotated[str, typer.Option("--role-b", "-b", help="Name for second Claude")] = "Position B",
+    prompt_a: Annotated[str, typer.Option("--prompt-a", help="System prompt for A")] = "",
+    prompt_b: Annotated[str, typer.Option("--prompt-b", help="System prompt for B")] = "",
+    rounds: Annotated[int, typer.Option("--rounds", "-r", help="Max debate rounds")] = 5,
+    timeout: Annotated[float, typer.Option("--timeout", "-t", help="Timeout per round (seconds)")] = 300.0,
+    transport: Annotated[str, typer.Option("--transport", help="tmux or stream-json")] = "stream-json",
+    model: Annotated[Optional[str], typer.Option("--model", "-m", help="Model name")] = None,
+    cwd: Annotated[str, typer.Option("--cwd", "-d", help="Working directory")] = ".",
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Verbose output")] = False,
+) -> None:
+    """
+    Start a debate between two Claude instances.
+
+    Each Claude gets a role and they alternate discussing the topic.
+
+    Examples:
+
+        ccc relay debate "Is AI beneficial?" --role-a Optimist --role-b Skeptic
+
+        ccc relay debate "Python vs Rust for CLI tools" -a "Python fan" -b "Rust fan" -r 3
+    """
+    import asyncio
+    from claude_cli_connector.relay import (
+        RelayOrchestrator, RelayConfig, RelayRole, RelayMode,
+    )
+    from claude_cli_connector.transport_base import TransportMode
+    from rich.panel import Panel
+
+    sys_a = prompt_a or f"You are \"{role_a}\". Argue your position convincingly."
+    sys_b = prompt_b or f"You are \"{role_b}\". Argue your position convincingly."
+
+    transport_mode = TransportMode.STREAM_JSON if transport == "stream-json" else TransportMode.TMUX
+
+    config = RelayConfig(
+        mode=RelayMode.DEBATE,
+        role_a=RelayRole(name=role_a, system_prompt=sys_a, model=model or ""),
+        role_b=RelayRole(name=role_b, system_prompt=sys_b, model=model or ""),
+        initial_topic=topic,
+        max_rounds=rounds,
+        round_timeout=timeout,
+        transport_mode=transport_mode,
+        cwd=cwd,
+        verbose=verbose,
+    )
+
+    rprint(f"\n[bold]Debate:[/bold] {topic}")
+    rprint(f"  [cyan]{role_a}[/cyan] vs [magenta]{role_b}[/magenta]  •  {rounds} rounds  •  {transport}\n")
+
+    def on_turn(turn):
+        style = "cyan" if turn.speaker == role_a else "magenta"
+        header = f"[{style}]Round {turn.round_num} — {turn.speaker}[/{style}]"
+        content = turn.content[:2000] + ("…" if len(turn.content) > 2000 else "")
+        console.print(Panel(content, title=header, expand=True))
+        if turn.cost_usd > 0:
+            rprint(f"  [dim]cost: ${turn.cost_usd:.4f}[/dim]")
+
+    try:
+        orch = RelayOrchestrator(config)
+        result = asyncio.run(orch.run(on_turn=on_turn))
+        _display_relay_result(result)
+    except ConnectorError as exc:
+        _bail(str(exc))
+    except KeyboardInterrupt:
+        rprint("\n[yellow]Relay interrupted.[/yellow]")
+
+
+@relay_app.command()
+def collab(
+    task: Annotated[str, typer.Argument(help="Task description")],
+    dev: Annotated[str, typer.Option("--dev", help="Developer role name")] = "Developer",
+    reviewer: Annotated[str, typer.Option("--reviewer", help="Reviewer role name")] = "Reviewer",
+    dev_prompt: Annotated[str, typer.Option("--dev-prompt", help="System prompt for developer")] = "",
+    reviewer_prompt: Annotated[str, typer.Option("--reviewer-prompt", help="System prompt for reviewer")] = "",
+    rounds: Annotated[int, typer.Option("--rounds", "-r", help="Max iteration rounds")] = 5,
+    timeout: Annotated[float, typer.Option("--timeout", "-t", help="Timeout per round (seconds)")] = 300.0,
+    transport: Annotated[str, typer.Option("--transport", help="tmux or stream-json")] = "stream-json",
+    model: Annotated[Optional[str], typer.Option("--model", "-m", help="Model name")] = None,
+    cwd: Annotated[str, typer.Option("--cwd", "-d", help="Working directory")] = ".",
+    tools: Annotated[Optional[str], typer.Option("--tools", help="Comma-separated allowed tools")] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Verbose output")] = False,
+) -> None:
+    """
+    Start a code collaboration relay: Developer writes, Reviewer reviews.
+
+    They iterate until the reviewer approves (says LGTM) or max rounds.
+
+    Examples:
+
+        ccc relay collab "Implement an LRU cache in Python" --rounds 3
+
+        ccc relay collab "Write a binary search tree" --dev "Coder" --reviewer "Tester"
+    """
+    import asyncio
+    from claude_cli_connector.relay import (
+        RelayOrchestrator, RelayConfig, RelayRole, RelayMode,
+    )
+    from claude_cli_connector.transport_base import TransportMode
+    from rich.panel import Panel
+
+    sys_dev = dev_prompt or f"You are \"{dev}\". Write clean, well-documented code."
+    sys_rev = reviewer_prompt or f"You are \"{reviewer}\". Review code thoroughly. Say LGTM when satisfied."
+
+    transport_mode = TransportMode.STREAM_JSON if transport == "stream-json" else TransportMode.TMUX
+    allowed_tools = tools.split(",") if tools else []
+
+    config = RelayConfig(
+        mode=RelayMode.COLLAB,
+        role_a=RelayRole(name=dev, system_prompt=sys_dev, model=model or ""),
+        role_b=RelayRole(name=reviewer, system_prompt=sys_rev, model=model or ""),
+        task_description=task,
+        max_rounds=rounds,
+        round_timeout=timeout,
+        transport_mode=transport_mode,
+        cwd=cwd,
+        allowed_tools=allowed_tools,
+        verbose=verbose,
+    )
+
+    rprint(f"\n[bold]Collab:[/bold] {task}")
+    rprint(f"  [green]{dev}[/green] ↔ [yellow]{reviewer}[/yellow]  •  max {rounds} rounds  •  {transport}\n")
+
+    def on_turn(turn):
+        style = "green" if turn.speaker == dev else "yellow"
+        header = f"[{style}]Iteration {turn.round_num} — {turn.speaker}[/{style}]"
+        content = turn.content[:2000] + ("…" if len(turn.content) > 2000 else "")
+        console.print(Panel(content, title=header, expand=True))
+        if turn.cost_usd > 0:
+            rprint(f"  [dim]cost: ${turn.cost_usd:.4f}[/dim]")
+
+    try:
+        orch = RelayOrchestrator(config)
+        result = asyncio.run(orch.run(on_turn=on_turn))
+        _display_relay_result(result)
+    except ConnectorError as exc:
+        _bail(str(exc))
+    except KeyboardInterrupt:
+        rprint("\n[yellow]Relay interrupted.[/yellow]")
+
+
+def _display_relay_result(result) -> None:
+    """Pretty-print relay completion summary."""
+    from claude_cli_connector.relay import RelayResult
+
+    duration = result.end_time - result.start_time
+    rprint(f"\n[bold]Relay complete[/bold]")
+    rprint(f"  Mode: {result.mode}")
+    rprint(f"  Rounds: {result.rounds_completed}")
+    rprint(f"  Status: {result.final_state}")
+    rprint(f"  Duration: {duration:.1f}s")
+    if result.total_cost_usd > 0:
+        rprint(f"  Total cost: ${result.total_cost_usd:.4f}")
+    if result.history_path:
+        rprint(f"  History: [dim]{result.history_path}[/dim]")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
