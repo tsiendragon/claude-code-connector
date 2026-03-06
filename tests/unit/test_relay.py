@@ -154,22 +154,16 @@ class TestHelpers:
 
 class TestStreamJsonRelayAdapter:
     def test_adapter_name(self):
-        mock_transport = MagicMock()
-        mock_transport.name = "test-session"
-        adapter = StreamJsonRelayAdapter(mock_transport)
+        adapter = StreamJsonRelayAdapter(name="test-session")
         assert adapter.adapter_name == "test-session"
 
-    def test_is_alive(self):
-        mock_transport = MagicMock()
-        mock_transport.is_alive.return_value = True
-        adapter = StreamJsonRelayAdapter(mock_transport)
-        assert adapter.is_alive() is True
+    def test_is_alive_before_any_call(self):
+        adapter = StreamJsonRelayAdapter(name="test-session")
+        assert adapter.is_alive() is False
 
-    def test_kill(self):
-        mock_transport = MagicMock()
-        adapter = StreamJsonRelayAdapter(mock_transport)
-        adapter.kill()
-        mock_transport.kill.assert_called_once()
+    def test_kill_before_any_call(self):
+        adapter = StreamJsonRelayAdapter(name="test-session")
+        adapter.kill()  # should not raise
 
 
 class TestTmuxRelayAdapter:

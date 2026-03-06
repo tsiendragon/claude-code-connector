@@ -238,6 +238,13 @@ class StreamJsonTransport(BaseTransport):
     def kill(self) -> None:
         if self._process is not None:
             try:
+                # Close stdin/stdout first to avoid BrokenPipeError on GC
+                for stream in (self._process.stdin, self._process.stdout, self._process.stderr):
+                    if stream:
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
                 self._process.terminate()
                 self._process.wait(timeout=5)
             except subprocess.TimeoutExpired:

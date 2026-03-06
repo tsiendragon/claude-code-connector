@@ -158,24 +158,72 @@ class RelayAdapter(ABC):
 
 
 class StreamJsonRelayAdapter(RelayAdapter):
-    """Wraps :class:`StreamJsonTransport` for relay use."""
+    """Wraps :class:`StreamJsonTransport` for relay use.
 
-    def __init__(self, transport: Any) -> None:
-        self._transport = transport
+    Since ``claude -p`` is one-shot (the process exits after responding),
+    this adapter spawns a **fresh process** for every ``send_and_wait``
+    call and tears it down afterwards.
+    """
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        cwd: str = ".",
+        command: str = "claude",
+        allowed_tools: list[str] | None = None,
+        system_prompt: str = "",
+        model: str = "",
+        verbose: bool = True,
+    ) -> None:
+        self._name = name
+        self._cwd = cwd
+        self._command = command
+        self._allowed_tools = allowed_tools or []
+        self._system_prompt = system_prompt
+        self._model = model
+        self._verbose = verbose
+        self._last_transport: Any = None  # for kill()
 
     async def send_and_wait(self, text: str, timeout: float) -> tuple[str, float]:
-        msg = await self._transport.async_send_and_collect(text, timeout=timeout)
-        return msg.content, msg.cost_usd
+        from claude_cli_connector.transport_stream import StreamJsonTransport
+
+        transport = StreamJsonTransport(
+            _name=self._name,
+            _cwd=self._cwd,
+            _command=self._command,
+            _allowed_tools=self._allowed_tools,
+            _system_prompt=self._system_prompt,
+            _model=self._model,
+            _verbose=self._verbose,
+            _enable_history=False,
+        )
+        transport.start()
+        self._last_transport = transport
+
+        try:
+            msg = await transport.async_send_and_collect(text, timeout=timeout)
+            return msg.content, msg.cost_usd
+        finally:
+            try:
+                transport.kill()
+            except Exception:
+                pass
 
     def is_alive(self) -> bool:
-        return self._transport.is_alive()
+        return self._last_transport is not None and self._last_transport.is_alive()
 
     def kill(self) -> None:
-        self._transport.kill()
+        if self._last_transport is not None:
+            try:
+                self._last_transport.kill()
+            except Exception:
+                pass
+            self._last_transport = None
 
     @property
     def adapter_name(self) -> str:
-        return self._transport.name
+        return self._name
 
 
 class TmuxRelayAdapter(RelayAdapter):
@@ -326,33 +374,25 @@ class RelayOrchestrator:
             )
 
     async def _start_stream_json(self) -> None:
-        from claude_cli_connector.transport_stream import StreamJsonTransport
-
-        transport_a = StreamJsonTransport(
-            _name=f"relay-{self.config.role_a.name}",
-            _cwd=self.config.cwd,
-            _command=self.config.command,
-            _allowed_tools=self.config.allowed_tools,
-            _system_prompt=self.config.role_a.system_prompt,
-            _model=self.config.role_a.model,
-            _verbose=self.config.verbose,
-            _enable_history=False,  # relay logger handles history
+        self.adapter_a = StreamJsonRelayAdapter(
+            name=f"relay-{self.config.role_a.name}",
+            cwd=self.config.cwd,
+            command=self.config.command,
+            allowed_tools=self.config.allowed_tools,
+            system_prompt=self.config.role_a.system_prompt,
+            model=self.config.role_a.model,
+            verbose=self.config.verbose,
         )
-        transport_a.start()
-        self.adapter_a = StreamJsonRelayAdapter(transport_a)
 
-        transport_b = StreamJsonTransport(
-            _name=f"relay-{self.config.role_b.name}",
-            _cwd=self.config.cwd,
-            _command=self.config.command,
-            _allowed_tools=self.config.allowed_tools,
-            _system_prompt=self.config.role_b.system_prompt,
-            _model=self.config.role_b.model,
-            _verbose=self.config.verbose,
-            _enable_history=False,
+        self.adapter_b = StreamJsonRelayAdapter(
+            name=f"relay-{self.config.role_b.name}",
+            cwd=self.config.cwd,
+            command=self.config.command,
+            allowed_tools=self.config.allowed_tools,
+            system_prompt=self.config.role_b.system_prompt,
+            model=self.config.role_b.model,
+            verbose=self.config.verbose,
         )
-        transport_b.start()
-        self.adapter_b = StreamJsonRelayAdapter(transport_b)
 
     async def _start_tmux(self) -> None:
         from claude_cli_connector.session import ClaudeSession
