@@ -12,6 +12,7 @@ Commands (tmux mode — default)
   ccc status    <name> [--porcelain]              Show session state
   ccc ps                                          List all known sessions
   ccc kill      <name>                            Kill a session
+  ccc clean     [--yes] [--dry-run]               Remove dead session records
   ccc interrupt <name>                            Send Ctrl-C to a session
 
 Commands (stream-json mode)
@@ -249,6 +250,59 @@ def kill(
 
 
 # ---------------------------------------------------------------------------
+# clean  (remove dead session records)
+# ---------------------------------------------------------------------------
+
+@app.command()
+def clean(
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run", "-n", help="Show what would be removed without removing")] = False,
+) -> None:
+    """Remove stale session records whose tmux sessions no longer exist."""
+    store = get_default_store()
+    records = store.list_all()
+
+    if not records:
+        rprint("[dim]No sessions found.[/dim]")
+        raise typer.Exit(0)
+
+    dead: list[str] = []
+    alive: list[str] = []
+
+    for r in records:
+        try:
+            s = ClaudeSession.attach(name=r.name)
+            if s.is_alive():
+                alive.append(r.name)
+            else:
+                dead.append(r.name)
+        except Exception:
+            dead.append(r.name)
+
+    if not dead:
+        rprint("[green]✓[/green] All sessions are alive — nothing to clean.")
+        raise typer.Exit(0)
+
+    rprint(f"Found [bold]{len(dead)}[/bold] dead session(s): {', '.join(dead)}")
+    if alive:
+        rprint(f"  ([dim]{len(alive)} alive session(s) will be kept[/dim])")
+
+    if dry_run:
+        rprint("[dim]Dry run — no records removed.[/dim]")
+        raise typer.Exit(0)
+
+    if not yes:
+        confirmed = typer.confirm("Remove these dead session records?")
+        if not confirmed:
+            raise typer.Abort()
+
+    for name in dead:
+        store.delete(name)
+
+    rprint(f"[green]✓[/green] Removed {len(dead)} dead session record(s).")
+
+
+# ---------------------------------------------------------------------------
 # interrupt
 # ---------------------------------------------------------------------------
 
@@ -409,6 +463,7 @@ def stream(
             # Raw mode: print each JSON event
             import json
             transport.send(prompt)
+            transport.end_input()  # EOF → triggers claude -p processing
             for evt in transport.iter_events(timeout=timeout):
                 console.print_json(json.dumps(evt.data))
                 if evt.type in ("result", "eof"):

@@ -230,6 +230,18 @@ class StreamJsonTransport(BaseTransport):
         except (BrokenPipeError, OSError) as exc:
             raise TransportError(f"Failed to write to stdin: {exc}") from exc
 
+    def end_input(self) -> None:
+        """Close stdin to signal EOF — required for ``claude -p`` one-shot mode.
+
+        After calling this, no more messages can be sent to the process.
+        The process will begin generating its response.
+        """
+        if self._process and self._process.stdin:
+            try:
+                self._process.stdin.close()
+            except Exception:
+                pass
+
     def is_alive(self) -> bool:
         if self._process is None:
             return False
@@ -318,8 +330,14 @@ class StreamJsonTransport(BaseTransport):
         Send a message and block until the full response is collected.
 
         Returns a :class:`Message` with the aggregated assistant text.
+
+        .. note::
+
+            After sending, stdin is closed (EOF) to signal ``claude -p``
+            that input is complete.  This is required for one-shot mode.
         """
         self.send(text)
+        self.end_input()  # close stdin → triggers claude -p to process
 
         full_text_parts: list[str] = []
         tool_uses: list[dict] = []
@@ -412,6 +430,7 @@ class StreamJsonTransport(BaseTransport):
     async def async_send_and_collect(self, text: str, timeout: float = 300.0) -> Message:
         """Async version of send_and_collect."""
         await self.async_send(text)
+        self.end_input()  # close stdin → triggers claude -p to process
 
         full_text_parts: list[str] = []
         result_data: dict[str, Any] = {}
