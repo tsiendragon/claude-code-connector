@@ -88,6 +88,14 @@ _RESPONSE_MARKER_RE = re.compile(r"^⏺\s*")
 # Separator line (the horizontal rules in Claude Code CLI).
 _SEPARATOR_RE = re.compile(r"^[─━═▪\s]{10,}$")
 
+# TUI hint / chrome lines that should be filtered from response extraction.
+_TUI_HINTS = frozenset({
+    "? for shortcuts",
+    "ctrl+r to search history",
+    "esc to interrupt",
+    "esc to cancel",
+})
+
 # --- Cursor Agent patterns ---
 # Input box top/bottom borders: ┌───...───┐ / └───...───┘
 _CURSOR_BOX_RE = re.compile(r"^[┌└][─┐┘\s]+$")
@@ -394,6 +402,64 @@ def _extract_cursor_response(clean: list[str]) -> str | None:
     return "\n".join(response_block).strip()
 
 
+# ---------------------------------------------------------------------------
+# Model picker detection
+# ---------------------------------------------------------------------------
+
+# Regex for known Claude model name patterns.
+_MODEL_NAME_RE = re.compile(
+    r"(claude-(?:opus|sonnet|haiku|instant)[\w.-]*)",
+    re.IGNORECASE,
+)
+
+
+def detect_model_picker(lines: list[str]) -> list[ChoiceItem] | None:
+    """
+    Detect a model picker menu in the pane output.
+
+    Claude Code CLI's ``/model`` command uses an ink-based TUI with radio
+    buttons (``○``/``●``) or highlighted items.  After ANSI stripping, model
+    names are often plain text lines containing known model name patterns.
+
+    This function first tries the generic :func:`detect_choices` approach.
+    If that fails, it falls back to scanning for lines matching known model
+    name patterns (e.g. ``claude-opus-4-5``, ``claude-sonnet-4-5``).
+
+    Returns a list of :class:`ChoiceItem` when models are found, or ``None``.
+    """
+    # First, try the generic choice detection.
+    choices = detect_choices(lines)
+    if choices:
+        return choices
+
+    # Fallback: scan for model name patterns in pane output.
+    # Claude Code CLI model names follow patterns like:
+    #   claude-opus-4-5-20250514
+    #   claude-sonnet-4-5
+    #   claude-haiku-4-5
+    # They may appear with bullet/radio prefixes or as plain text.
+    clean = strip_ansi_lines(lines)
+    tail = clean[-30:]  # inspect last 30 lines for model picker
+
+    models: list[ChoiceItem] = []
+    seen: set[str] = set()
+    for line in tail:
+        m = _MODEL_NAME_RE.search(line)
+        if m:
+            model_name = m.group(1)
+            if model_name not in seen:
+                seen.add(model_name)
+                # Check if this is the selected item (● prefix or ❯ prefix).
+                selected = bool(re.match(r"^\s*[●❯►▶>]\s*", line))
+                models.append(ChoiceItem(
+                    key=str(len(models) + 1),
+                    label=model_name,
+                    selected=selected,
+                ))
+
+    return models if len(models) >= 2 else None
+
+
 def extract_last_response(lines: list[str], backend: str = "") -> str:
     """
     Extract the last assistant response from a full pane capture.
@@ -463,7 +529,7 @@ def extract_last_response(lines: list[str], backend: str = "") -> str:
             if s == "❯":
                 last_idle = i
                 break
-        elif _SEPARATOR_RE.fullmatch(s) or s == "? for shortcuts":
+        elif _SEPARATOR_RE.fullmatch(s) or s.lower() in _TUI_HINTS:
             continue
         else:
             break
@@ -482,8 +548,8 @@ def extract_last_response(lines: list[str], backend: str = "") -> str:
             response_lines = []
             for ln in clean[user_input_idx + 1 : last_idle]:
                 s = ln.strip()
-                # Skip separator lines, "? for shortcuts", empty lines at boundaries
-                if _SEPARATOR_RE.fullmatch(s):
+                # Skip separator lines and TUI hints
+                if _SEPARATOR_RE.fullmatch(s) or s.lower() in _TUI_HINTS:
                     continue
                 response_lines.append(ln)
 

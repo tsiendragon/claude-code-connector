@@ -558,18 +558,24 @@ class RelayOrchestrator:
 
         for rnd in range(1, cfg.max_rounds + 1):
             # --- Role A speaks ---
+            # NOTE: Prompts are framed as analysis tasks rather than role-play
+            # to work with both headless (-p) and interactive TUI modes.
+            # Claude Code TUI rejects "You are X" role-play requests.
             if rnd == 1:
                 prompt_a = (
-                    f"You are \"{role_a}\" in a debate.\n\n"
-                    f"Topic: {topic}\n\n"
-                    f"Present your opening argument. Be specific and substantive."
+                    f"Topic for structured comparison: {topic}\n\n"
+                    f"Please present the strongest arguments from the "
+                    f"\"{role_a}\" perspective. Be specific and substantive "
+                    f"with concrete examples."
                 )
             else:
                 last_b = transcript[-1].content
                 prompt_a = (
-                    f"You are \"{role_a}\" in a debate on: {topic}\n\n"
-                    f"[{role_b}] said:\n{last_b}\n\n"
-                    f"Respond to their points. This is round {rnd} of {cfg.max_rounds}."
+                    f"Topic: {topic}\n\n"
+                    f"The opposing side (\"{role_b}\") argued:\n{last_b}\n\n"
+                    f"Please respond from the \"{role_a}\" perspective. "
+                    f"Address their points directly. "
+                    f"Round {rnd} of {cfg.max_rounds}."
                 )
 
             response_a, cost_a = await self.adapter_a.send_and_wait(prompt_a, timeout)
@@ -582,16 +588,18 @@ class RelayOrchestrator:
             # --- Role B speaks ---
             if rnd == 1:
                 prompt_b = (
-                    f"You are \"{role_b}\" in a debate.\n\n"
-                    f"Topic: {topic}\n\n"
-                    f"[{role_a}] said:\n{response_a}\n\n"
-                    f"Present your counter-argument. Be specific and substantive."
+                    f"Topic for structured comparison: {topic}\n\n"
+                    f"The other side (\"{role_a}\") argued:\n{response_a}\n\n"
+                    f"Please present counter-arguments from the "
+                    f"\"{role_b}\" perspective. Be specific and substantive."
                 )
             else:
                 prompt_b = (
-                    f"You are \"{role_b}\" in a debate on: {topic}\n\n"
-                    f"[{role_a}] said:\n{response_a}\n\n"
-                    f"Respond to their points. This is round {rnd} of {cfg.max_rounds}."
+                    f"Topic: {topic}\n\n"
+                    f"The opposing side (\"{role_a}\") argued:\n{response_a}\n\n"
+                    f"Please respond from the \"{role_b}\" perspective. "
+                    f"Address their points directly. "
+                    f"Round {rnd} of {cfg.max_rounds}."
                 )
 
             response_b, cost_b = await self.adapter_b.send_and_wait(prompt_b, timeout)
@@ -622,17 +630,16 @@ class RelayOrchestrator:
             # --- Developer writes ---
             if rnd == 1:
                 prompt_dev = (
-                    f"You are \"{dev}\".\n\n"
                     f"Task: {task}\n\n"
-                    f"Provide your implementation. Write clean, well-documented code."
+                    f"Please implement a solution. Write clean, well-documented code."
                 )
             else:
                 last_feedback = transcript[-1].content
                 prompt_dev = (
-                    f"You are \"{dev}\".\n\n"
                     f"Task: {task}\n\n"
-                    f"The reviewer [{reviewer}] gave this feedback:\n{last_feedback}\n\n"
-                    f"Revise your implementation. This is iteration {rnd} of {cfg.max_rounds}."
+                    f"A code reviewer provided this feedback:\n{last_feedback}\n\n"
+                    f"Please revise the implementation based on this feedback. "
+                    f"Iteration {rnd} of {cfg.max_rounds}."
                 )
 
             response_dev, cost_dev = await self.adapter_a.send_and_wait(prompt_dev, timeout)
@@ -644,10 +651,10 @@ class RelayOrchestrator:
 
             # --- Reviewer reviews ---
             prompt_review = (
-                f"You are \"{reviewer}\".\n\n"
                 f"Task: {task}\n\n"
-                f"[{dev}] submitted this solution (iteration {rnd}):\n{response_dev}\n\n"
-                f"Review the code. Point out issues, suggest improvements.\n"
+                f"A developer submitted this solution (iteration {rnd}):\n{response_dev}\n\n"
+                f"Please review the code. Point out bugs, suggest improvements, "
+                f"and assess code quality.\n"
                 f"If the solution is good enough, say \"LGTM\" or \"approved\"."
             )
 
