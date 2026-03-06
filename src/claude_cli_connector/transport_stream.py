@@ -103,6 +103,7 @@ class StreamJsonTransport(BaseTransport):
     _extra_args: dict[str, str] = field(default_factory=dict)
     _verbose: bool = True
     _include_partial: bool = False
+    _enable_history: bool = True
 
     # Internal state
     _process: Optional[subprocess.Popen] = field(default=None, init=False, repr=False)
@@ -111,6 +112,7 @@ class StreamJsonTransport(BaseTransport):
     _session_id: str = field(default="", init=False)
     _events: list[TransportEvent] = field(default_factory=list, init=False, repr=False)
     _accumulated_text: str = field(default="", init=False, repr=False)
+    _history: Any = field(default=None, init=False, repr=False)
 
     # -------------------------------------------------------------------
     # Lifecycle
@@ -118,6 +120,13 @@ class StreamJsonTransport(BaseTransport):
 
     def start(self) -> None:
         """Spawn the ``claude`` subprocess in stream-json mode."""
+        if self._enable_history:
+            from claude_cli_connector.history import ConversationLogger
+            self._history = ConversationLogger(
+                session_name=self._name,
+                transport="stream-json",
+            )
+
         cmd = self._build_command()
         logger.info("StreamJson: starting %s", " ".join(cmd))
 
@@ -216,6 +225,8 @@ class StreamJsonTransport(BaseTransport):
             self._process.stdin.write(raw)
             self._process.stdin.flush()
             logger.debug("StreamJson: sent %d bytes", len(raw))
+            if self._history:
+                self._history.log_user(text)
         except (BrokenPipeError, OSError) as exc:
             raise TransportError(f"Failed to write to stdin: {exc}") from exc
 
@@ -343,6 +354,13 @@ class StreamJsonTransport(BaseTransport):
 
         content = "".join(full_text_parts).strip()
         self._accumulated_text = content
+
+        if self._history and content:
+            self._history.log_assistant(
+                content,
+                session_id=result_data.get("session_id", ""),
+                cost_usd=result_data.get("cost_usd", 0.0),
+            )
 
         return Message(
             role="assistant",

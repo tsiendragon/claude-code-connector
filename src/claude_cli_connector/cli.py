@@ -266,6 +266,105 @@ def interrupt(
 
 
 # ---------------------------------------------------------------------------
+# history
+# ---------------------------------------------------------------------------
+
+@app.command()
+def history(
+    name: Annotated[Optional[str], typer.Argument(help="Session name (omit to list all)")] = None,
+    last: Annotated[int, typer.Option("--last", "-n", help="Show last N entries")] = 0,
+    run: Annotated[Optional[str], typer.Option("--run", "-r", help="Specific run ID")] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="Output as JSON lines")] = False,
+) -> None:
+    """
+    View conversation history for a session.
+
+    Without arguments, lists all sessions that have history.
+    With a session name, shows the conversation log.
+
+    Examples:
+        ccc history                  # list sessions with history
+        ccc history myproject        # full history for myproject
+        ccc history myproject -n 10  # last 10 entries
+        ccc history myproject --json # raw JSONL output
+    """
+    from claude_cli_connector.history import (
+        list_sessions_with_history,
+        list_session_runs,
+        read_full_session_history,
+        read_history_file,
+    )
+    import datetime
+    import json
+
+    if name is None:
+        # List all sessions with history
+        sessions = list_sessions_with_history()
+        if not sessions:
+            rprint("[dim]No conversation history found.[/dim]")
+            raise typer.Exit(0)
+
+        table = Table(title="Sessions with History", show_lines=True)
+        table.add_column("Session", style="bold cyan")
+        table.add_column("Runs", justify="right")
+        table.add_column("Latest run", style="dim")
+
+        for sname in sessions:
+            runs = list_session_runs(sname)
+            latest = runs[-1].stem if runs else ""
+            table.add_row(sname, str(len(runs)), latest)
+
+        console.print(table)
+        return
+
+    # Show history for a specific session
+    if run:
+        from claude_cli_connector.history import _history_dir
+        run_path = _history_dir() / name / f"{run}.jsonl"
+        entries = read_history_file(run_path)
+    else:
+        entries = read_full_session_history(name)
+
+    if not entries:
+        rprint(f"[dim]No history for session '{name}'.[/dim]")
+
+        # Show available runs
+        runs = list_session_runs(name)
+        if runs:
+            rprint("[dim]Available runs:[/dim]")
+            for r in runs:
+                rprint(f"  [cyan]{r.stem}[/cyan]")
+        raise typer.Exit(0)
+
+    if last > 0:
+        entries = entries[-last:]
+
+    if json_out:
+        for entry in entries:
+            print(entry.to_json())
+        return
+
+    # Human-readable output
+    ROLE_STYLE = {
+        "user": "[bold blue]USER[/bold blue]",
+        "assistant": "[bold green]CLAUDE[/bold green]",
+        "system": "[dim]SYSTEM[/dim]",
+        "tool": "[yellow]TOOL[/yellow]",
+    }
+
+    for entry in entries:
+        ts = datetime.datetime.fromtimestamp(entry.ts).strftime("%H:%M:%S")
+        role_label = ROLE_STYLE.get(entry.role, entry.role)
+        content = entry.content
+
+        # Truncate long messages for display
+        if len(content) > 500:
+            content = content[:500] + "…"
+
+        rprint(f"[dim]{ts}[/dim] {role_label}  {content}")
+
+
+# ---------------------------------------------------------------------------
 # stream  (stream-json mode — one-shot)
 # ---------------------------------------------------------------------------
 

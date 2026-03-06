@@ -51,6 +51,9 @@ from claude_cli_connector.transport_stream import StreamJsonTransport
 from claude_cli_connector.transport_sdk import SdkTransport
 from claude_cli_connector.transport_acp import AcpTransport
 
+# History
+from claude_cli_connector.history import ConversationLogger, HistoryEntry
+
 # Exceptions
 from claude_cli_connector.exceptions import (
     ConnectorError,
@@ -73,6 +76,9 @@ __all__ = [
     "StreamJsonTransport",
     "SdkTransport",
     "AcpTransport",
+    # History
+    "ConversationLogger",
+    "HistoryEntry",
     # Parser types (re-exported for convenience)
     "ChoiceItem",
     "detect_choices",

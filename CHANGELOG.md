@@ -30,6 +30,20 @@ This project follows [Semantic Versioning](https://semver.org/).
   `claude-agent-sdk`.
 - 50 new unit tests covering all three new transports (137 total).
 
+### Added — Conversation history
+- **`history.py`** — `ConversationLogger` persists user↔assistant messages
+  as JSONL files under `~/.local/share/claude-cli-connector/history/{session}/`.
+  Automatically logs `send()` and `send_and_wait()` in tmux mode, and
+  `send()` / `send_and_collect()` in stream-json mode.
+- **`HistoryEntry`** dataclass with `to_json()` / `from_json()` round-trip.
+- Helper functions: `list_sessions_with_history()`, `list_session_runs()`,
+  `read_full_session_history()`, `read_history_file()`.
+- **CLI `ccc history`** — View conversation history for any session.
+  Supports `--last N`, `--run <id>`, `--json` output.
+  Without arguments, lists all sessions that have history.
+- Override storage location with `$CCC_HISTORY_DIR` env var.
+- 23 new unit tests for history module (160 total).
+
 ### Fixed
 - `TmuxTransport.create()` now raises `SessionAlreadyExistsError` (not
   `TransportError`) when a duplicate session is detected.

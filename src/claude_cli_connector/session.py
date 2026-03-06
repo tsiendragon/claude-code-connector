@@ -18,6 +18,7 @@ import time
 from typing import Optional
 
 from claude_cli_connector.exceptions import SessionTimeoutError, SessionNotFoundError
+from claude_cli_connector.history import ConversationLogger
 from claude_cli_connector.parser import (
     detect_ready,
     detect_choices,
@@ -75,6 +76,7 @@ class ClaudeSession:
         ready_timeout: float = DEFAULT_READY_TIMEOUT,
         poll_interval: float = DEFAULT_POLL_INTERVAL,
         stable_secs: float = DEFAULT_STABLE_SECS,
+        enable_history: bool = True,
     ) -> None:
         self._transport = transport
         self._store = store or get_default_store()
@@ -85,6 +87,14 @@ class ClaudeSession:
         # Cursor: line count of the last captured snapshot (for tail()).
         self._last_line_count: int = 0
         self._last_lines: list[str] = []
+
+        # Conversation history logger
+        self._history: Optional[ConversationLogger] = None
+        if enable_history:
+            self._history = ConversationLogger(
+                session_name=transport.logical_name,
+                transport="tmux",
+            )
 
     # ------------------------------------------------------------------
     # Factory class methods
@@ -198,6 +208,8 @@ class ClaudeSession:
         """
         self._transport.send_keys(text, enter=enter)
         self._store.touch(self.name)
+        if self._history:
+            self._history.log_user(text)
 
     def wait_ready(
         self,
@@ -300,6 +312,9 @@ class ClaudeSession:
         after_lines = strip_ansi_lines(self._last_lines)
         response = extract_last_response(after_lines)
 
+        if self._history and response:
+            self._history.log_assistant(response)
+
         return response
 
     # ------------------------------------------------------------------
@@ -401,6 +416,11 @@ class ClaudeSession:
     def transport(self) -> TmuxTransport:
         """Direct access to the underlying :class:`TmuxTransport`."""
         return self._transport
+
+    @property
+    def history(self) -> Optional[ConversationLogger]:
+        """Conversation history logger (None if ``enable_history=False``)."""
+        return self._history
 
     def __repr__(self) -> str:
         alive = self.is_alive()
