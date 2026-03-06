@@ -502,7 +502,10 @@ class RelayOrchestrator:
 
         ts = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
         session_name = f"relay-{self.config.mode.value}"
-        run_id = f"{self.config.role_a.name}-vs-{self.config.role_b.name}-{ts}"
+        def _sanitize(name: str) -> str:
+            return name.replace(" ", "_").replace("/", "_")
+
+        run_id = f"{_sanitize(self.config.role_a.name)}-vs-{_sanitize(self.config.role_b.name)}-{ts}"
 
         self._relay_logger = ConversationLogger(
             session_name=session_name,
