@@ -2,20 +2,25 @@
 transport_stream.py
 -------------------
 Stream-JSON transport: spawns ``claude -p`` with ``--output-format stream-json``
-and ``--input-format stream-json`` for bidirectional structured communication.
+for structured output communication via subprocess stdin/stdout.
 
-This is the recommended programmatic mode for Claude Code CLI.  Each line on
-stdout is a self-contained JSON object (newline-delimited JSON / NDJSON).
+Each line on stdout is a self-contained JSON object (newline-delimited JSON /
+NDJSON).  Input can be either plain text (default, best for one-shot mode) or
+stream-json formatted (for multi-turn protocol).
 
-Message flow
-~~~~~~~~~~~~
+Message flow (plain text input — default)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Python  →  stdin   →  "What is 2+2?"  (plain text, then close stdin)
+  Python  ←  stdout  ←  {"type": "result", "result": "4", ...}
+
+Message flow (stream-json input)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   Python  →  stdin   →  {"type": "user", "message": {...}}
   Python  ←  stdout  ←  {"type": "assistant", ...}  (per-token or per-turn)
 
 References
 ~~~~~~~~~~
   - https://code.claude.com/docs/en/headless
-  - OpenCovibe src-tauri: bidirectional stream-JSON over stdin/stdout
 """
 
 from __future__ import annotations
@@ -92,6 +97,10 @@ class StreamJsonTransport(BaseTransport):
         Whether to pass ``--verbose`` for full turn-by-turn output.
     include_partial:
         Whether to pass ``--include-partial-messages`` for token-level streaming.
+    json_input:
+        Whether to use ``--input-format stream-json`` (for multi-turn protocol).
+        Default is False (plain text input), which is recommended for one-shot
+        ``claude -p`` usage.
     """
 
     _name: str
@@ -104,14 +113,17 @@ class StreamJsonTransport(BaseTransport):
     _verbose: bool = True
     _include_partial: bool = False
     _enable_history: bool = True
+    _json_input: bool = False  # True → --input-format stream-json; False → plain text
 
     # Internal state
     _process: Optional[subprocess.Popen] = field(default=None, init=False, repr=False)
     _stdout_queue: Queue = field(default_factory=Queue, init=False, repr=False)
     _reader_thread: Optional[threading.Thread] = field(default=None, init=False, repr=False)
+    _stderr_thread: Optional[threading.Thread] = field(default=None, init=False, repr=False)
     _session_id: str = field(default="", init=False)
     _events: list[TransportEvent] = field(default_factory=list, init=False, repr=False)
     _accumulated_text: str = field(default="", init=False, repr=False)
+    _stderr_lines: list[str] = field(default_factory=list, init=False, repr=False)
     _history: Any = field(default=None, init=False, repr=False)
 
     # -------------------------------------------------------------------
@@ -155,13 +167,22 @@ class StreamJsonTransport(BaseTransport):
         )
         self._reader_thread.start()
 
+        # Background stderr reader for diagnostics
+        self._stderr_thread = threading.Thread(
+            target=self._read_stderr_loop,
+            daemon=True,
+            name=f"ccc-stderr-{self._name}",
+        )
+        self._stderr_thread.start()
+
     def _build_command(self) -> list[str]:
         """Build the CLI argument list."""
         cmd = [
             self._command, "-p",
             "--output-format", "stream-json",
-            "--input-format", "stream-json",
         ]
+        if self._json_input:
+            cmd.extend(["--input-format", "stream-json"])
         if self._verbose:
             cmd.append("--verbose")
         if self._include_partial:
@@ -203,28 +224,51 @@ class StreamJsonTransport(BaseTransport):
             # Sentinel to signal EOF
             self._stdout_queue.put(None)
 
+    def _read_stderr_loop(self) -> None:
+        """Background thread: capture stderr lines for diagnostics."""
+        assert self._process and self._process.stderr
+        try:
+            for line in self._process.stderr:
+                line = line.strip()
+                if line:
+                    self._stderr_lines.append(line)
+                    logger.debug("StreamJson stderr: %s", line[:500])
+        except Exception:
+            pass
+
     # -------------------------------------------------------------------
     # BaseTransport interface
     # -------------------------------------------------------------------
 
     def send(self, text: str) -> None:
-        """Send a user message via stdin (stream-json format)."""
+        """Send a user message via stdin.
+
+        When ``_json_input`` is True, wraps the text in a stream-json envelope.
+        Otherwise writes plain text — the default for ``claude -p`` one-shot mode.
+        """
         if not self._process or not self._process.stdin:
             raise TransportError("StreamJson process not started. Call start() first.")
 
-        # For stream-json input format, wrap as a user message
-        msg = {
-            "type": "user",
-            "message": {
-                "role": "user",
-                "content": text,
-            },
-        }
-        raw = json.dumps(msg) + "\n"
+        if self._json_input:
+            # Stream-json input format: wrap as a user message
+            msg = {
+                "type": "user",
+                "message": {
+                    "role": "user",
+                    "content": text,
+                },
+            }
+            raw = json.dumps(msg) + "\n"
+        else:
+            # Plain text input: write text directly (default for claude -p)
+            raw = text
+            if not raw.endswith("\n"):
+                raw += "\n"
+
         try:
             self._process.stdin.write(raw)
             self._process.stdin.flush()
-            logger.debug("StreamJson: sent %d bytes", len(raw))
+            logger.debug("StreamJson: sent %d bytes (json_input=%s)", len(raw), self._json_input)
             if self._history:
                 self._history.log_user(text)
         except (BrokenPipeError, OSError) as exc:
@@ -345,6 +389,7 @@ class StreamJsonTransport(BaseTransport):
 
         for evt in self.iter_events(timeout=timeout):
             d = evt.data
+            logger.debug("StreamJson event: type=%s keys=%s", evt.type, list(d.keys()) if d else [])
 
             if evt.type == EVT_STREAM_EVENT:
                 # Unwrap agent SDK streaming events
@@ -378,6 +423,14 @@ class StreamJsonTransport(BaseTransport):
                 break
 
         content = "".join(full_text_parts).strip()
+        if not content:
+            logger.warning(
+                "StreamJson: empty response. Events received: %d, "
+                "event types: %s, stderr: %s",
+                len(self._events),
+                [e.type for e in self._events[-10:]],
+                self._stderr_lines[-5:] if self._stderr_lines else "none",
+            )
         self._accumulated_text = content
 
         if self._history and content:
@@ -437,6 +490,8 @@ class StreamJsonTransport(BaseTransport):
 
         async for evt in self.async_iter_events(timeout=timeout):
             d = evt.data
+            logger.debug("StreamJson async event: type=%s keys=%s", evt.type, list(d.keys()) if d else [])
+
             if evt.type == EVT_STREAM_EVENT:
                 inner = d.get("event", {})
                 delta = inner.get("delta", {})
@@ -460,6 +515,14 @@ class StreamJsonTransport(BaseTransport):
                 break
 
         content = "".join(full_text_parts).strip()
+        if not content:
+            logger.warning(
+                "StreamJson async: empty response. Events received: %d, "
+                "event types: %s, stderr: %s",
+                len(self._events),
+                [e.type for e in self._events[-10:]],
+                self._stderr_lines[-5:] if self._stderr_lines else "none",
+            )
 
         return Message(
             role="assistant",
@@ -487,6 +550,11 @@ class StreamJsonTransport(BaseTransport):
     def all_events(self) -> list[TransportEvent]:
         """Return all events received so far (for debugging)."""
         return list(self._events)
+
+    @property
+    def stderr_output(self) -> list[str]:
+        """Return captured stderr lines (for diagnostics)."""
+        return list(self._stderr_lines)
 
     def __repr__(self) -> str:
         alive = self.is_alive()

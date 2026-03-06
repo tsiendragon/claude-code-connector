@@ -60,6 +60,13 @@ This project follows [Semantic Versioning](https://semver.org/).
 - 23 new unit tests for history module (160 total).
 
 ### Fixed
+- **Stream-JSON input format**: `StreamJsonTransport` now defaults to **plain
+  text** stdin input (`_json_input=False`) instead of `--input-format stream-json`.
+  The undocumented stream-json input protocol was causing empty responses in
+  `claude -p` one-shot mode.  Set `_json_input=True` to restore the old
+  behaviour for multi-turn stream-json protocol.
+- **Stderr capture**: `StreamJsonTransport` now reads stderr in a background
+  thread and logs it at DEBUG level.  Access via `transport.stderr_output`.
 - `TmuxTransport.create()` now raises `SessionAlreadyExistsError` (not
   `TransportError`) when a duplicate session is detected.
 - `libtmux` compatibility: replaced removed `Server.find_where()` with

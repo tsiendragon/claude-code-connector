@@ -58,8 +58,16 @@ class TestStreamJsonTransport:
         assert "-p" in cmd
         assert "--output-format" in cmd
         assert "stream-json" in cmd
-        assert "--input-format" in cmd
+        # Default: plain text input (no --input-format)
+        assert "--input-format" not in cmd
         assert "--verbose" in cmd
+
+    def test_build_command_with_json_input(self):
+        t = StreamJsonTransport(_name="test", _json_input=True)
+        cmd = t._build_command()
+        assert "--input-format" in cmd
+        idx = cmd.index("--input-format")
+        assert cmd[idx + 1] == "stream-json"
 
     def test_build_command_with_tools(self):
         t = StreamJsonTransport(
@@ -103,8 +111,16 @@ class TestStreamJsonSend:
         t._process = proc
         return t, proc
 
-    def test_send_writes_json_to_stdin(self):
+    def test_send_writes_plain_text_by_default(self):
         t, proc = self._make_transport_with_mock_process()
+        t.send("Hello Claude")
+
+        written = proc.stdin.write.call_args[0][0]
+        assert written.strip() == "Hello Claude"
+
+    def test_send_writes_json_when_json_input(self):
+        t, proc = self._make_transport_with_mock_process()
+        t._json_input = True
         t.send("Hello Claude")
 
         written = proc.stdin.write.call_args[0][0]
