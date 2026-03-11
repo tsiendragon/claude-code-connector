@@ -1,0 +1,35 @@
+{
+  "backend": "codex",
+  "scenario": "thinking",
+  "description": "Codex actively processing — thinking indicator visible",
+  "captured_at": "2026-03-10T15:17:10.513Z",
+  "ccc_session": "fixture-codex",
+  "frame_interval_ms": 200,
+  "frames": [
+    {
+      "file": "01.txt",
+      "elapsed_ms": 0,
+      "label": "t=0"
+    },
+    {
+      "file": "02.txt",
+      "elapsed_ms": 200,
+      "label": "t+200ms"
+    },
+    {
+      "file": "03.txt",
+      "elapsed_ms": 400,
+      "label": "t+400ms"
+    },
+    {
+      "file": "04.txt",
+      "elapsed_ms": 600,
+      "label": "t+600ms"
+    },
+    {
+      "file": "05.txt",
+      "elapsed_ms": 800,
+      "label": "t+800ms"
+    }
+  ]
+}

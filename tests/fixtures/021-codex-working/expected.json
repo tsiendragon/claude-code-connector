@@ -1,0 +1,13 @@
+{
+  "description": "Codex actively processing — Working indicator visible",
+  "backend": "codex",
+  "detectReady": {
+    "isReady": false,
+    "confidence": "not_ready"
+  },
+  "extractLastResponse": "",
+  "detectPermission": null,
+  "classifyWindow": {
+    "state": "ready"
+  }
+}

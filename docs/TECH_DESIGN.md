@@ -1,9 +1,9 @@
 # Technical Design Document
 ## claude-cli-connector
 
-**版本**: v0.1
+**版本**: v0.2
 **作者**: Lilong Qian
-**更新日期**: 2026-03-05
+**更新日期**: 2026-03-06
 **状态**: Draft
 **关联文档**: [PRD.md](./PRD.md)
 
@@ -17,14 +17,15 @@
 - **分层清晰**: 每一层只做一件事，上层不绕过下层直接操作。
 - **fail-loud**: 任何异常用明确的自定义异常类型抛出，不静默吞掉错误。
 - **可测试**: transport 层用 libtmux 抽象，可 mock；parser 层是纯函数，无副作用，直接单测。
+- **agent-friendly**: CLI 提供 `read`/`wait`/`input`/`key`/`approve` 等低层原语，便于外部 agent 框架驱动。
 
 ### 1.2 层次结构
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│            调用方（Python 脚本 / Agent 框架 / demo）          │
+│            调用方（Python 脚本 / Agent 框架 / ccc CLI）        │
 └───────────────────────────┬──────────────────────────────────┘
-                            │  Python API
+                            │  Python API / CLI
               ┌─────────────┴──────────────┐
               │                            │
 ┌─────────────▼──────────┐   ┌────────────▼───────────┐
@@ -47,11 +48,21 @@
 │  · ANSI strip     │
 │  · ready detect   │
 │  · choice detect  │
+│  · permission det │
+│  · model picker   │
+│  · pane state     │
 └───┬──────────────┘
     │  tmux send-keys / capture-pane
 ┌───▼──────────────────────────────────┐
 │  tmux session: ccc-<name>            │
-│  └─ pane 0: claude (Claude Code CLI) │
+│  └─ pane 0: claude / cursor-agent    │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│  RelayOrchestrator (relay.py)        │
+│  两个 Claude 实例的交互编排           │
+│  · debate 模式: 辩论                 │
+│  · collab 模式: 开发+评审迭代         │
 └──────────────────────────────────────┘
 ```
 
@@ -103,13 +114,17 @@ class PaneSnapshot:
 | `TmuxTransport.attach(name)` | attach 已有 session | `TransportError` if not found |
 | `send_keys(text, enter)` | tmux send-keys | `TransportError` |
 | `send_ctrl(key)` | 发送控制键，如 `C-c` | `TransportError` |
-| `capture(start, end)` | capture-pane，返回 `PaneSnapshot` | `TransportError` |
+| `capture()` | capture-pane（可见区域），返回 `PaneSnapshot` | `TransportError` |
+| `capture_full(scrollback)` | capture-pane + 滚动缓冲区（默认 5000 行） | `TransportError` |
 | `is_alive()` | 检查 tmux session 是否存在 | 不抛出 |
-| `kill()` | kill-session | `TransportError` |
+| `kill()` | kill-session（兼容 libtmux ≥0.30 的 `kill()` 和旧版 `kill_session()`） | `TransportError` |
+| `resize(width, height)` | 调整 pane 尺寸 | `TransportError` |
 
 **tmux session 命名**: 统一加 `ccc-` 前缀（`ccc-<name>`），避免与用户自己的 session 冲突。
 
 **pane 尺寸**: 默认 220×50。宽度 220 是为了避免 CJK 字符（占 2 列）在 80 列终端里换行导致输出乱序。
+
+**scrollback 支持**: `capture_full()` 使用 `pane.cmd("capture-pane", "-p", "-S", "-N")` 直接调用 tmux 命令获取滚动缓冲区，解决了 `capture_pane()` 只能获取可见区域的限制。
 
 ---
 
@@ -194,14 +209,86 @@ def detect_choices(lines: list[str]) -> list[ChoiceItem] | None: ...
 
 返回 `None` 表示当前没有 choice menu。
 
-#### 2.3.4 其他工具函数
+#### 2.3.4 Permission 检测
+
+```python
+@dataclass
+class PermissionPrompt:
+    tool: str              # 工具名（如 "Bash", "Read"）
+    action: str            # 动作描述（如 "Allow Bash?", "Do you want to proceed?"）
+    options: list[ChoiceItem]  # 可选项
+
+def detect_permission(
+    lines: list[str],
+    backend: str = "",
+) -> PermissionPrompt | None: ...
+```
+
+识别两种 Claude Code CLI 的权限提示格式：
+
+**Format A**（Allow once/always/Deny）:
+```
+⏺ Claude wants to run: Bash(date)
+  Allow Bash?
+❯ Allow once
+  Allow always
+  Deny
+```
+
+**Format B**（Do you want to proceed? + 数字列表）:
+```
+Bash command
+   find /path -maxdepth 1 -type d | wc -l
+Do you want to proceed?
+❯ 1. Yes
+  2. Yes, allow reading from repos/ from this project
+  3. No
+Esc to cancel · Tab to amend · ctrl+e to explain
+```
+
+返回 `None` 表示当前没有权限提示。
+
+#### 2.3.5 Model Picker 检测
+
+```python
+def detect_model_picker(
+    lines: list[str],
+    backend: str = "",
+) -> list[ChoiceItem] | None: ...
+```
+
+识别 `/model` 命令触发的模型选择列表。Claude 和 Cursor 有不同的 UI 格式。
+
+#### 2.3.6 Pane State 综合检测（heartbeat 模式）
+
+```python
+@dataclass
+class PaneState:
+    state: str              # "ready" | "thinking" | "generating" | "approval" | "choosing"
+    confidence: str
+    permission: PermissionPrompt | None
+    choices: list[ChoiceItem] | None
+    activity: ActivityInfo | None
+
+def detect_pane_state(
+    capture_fn: Callable[[], list[str]],
+    backend: str = "",
+    activity_samples: int = 5,
+    activity_interval: float = 0.2,
+) -> PaneState: ...
+```
+
+`detect_pane_state()` 通过多次快照（heartbeat）区分 "thinking"（无输出）和 "generating"（输出正在流式生成），比单次快照的 pattern matching 更可靠。
+
+#### 2.3.7 其他工具函数
 
 ```python
 def diff_output(before: list[str], after: list[str]) -> list[str]: ...
 # 返回 after 中相对 before 新增的行（suffix diff，用于增量输出）
 
-def extract_last_response(lines: list[str]) -> str: ...
+def extract_last_response(lines: list[str], backend: str = "") -> str: ...
 # 从全量 pane 内容提取最近一次 Claude 回复（best-effort）
+# 支持 backend 参数区分 Claude 和 Cursor 的输出格式
 ```
 
 ---
@@ -220,6 +307,7 @@ class SessionRecord(BaseModel):
     tmux_session_name: str     # ccc-<name>
     cwd: str
     command: str = "claude"
+    backend: str = "claude"    # "claude" 或 "cursor"
     created_at: float          # unix timestamp
     last_seen_at: float
     extra: dict = {}           # 扩展字段
@@ -237,35 +325,35 @@ class SessionRecord(BaseModel):
 
 | 方法 | 行为 |
 |---|---|
-| `ClaudeSession.create(name, cwd)` | 创建 tmux session + 启动 claude + 写 store |
+| `ClaudeSession.create(name, cwd, command, backend)` | 创建 tmux session + 启动 claude/cursor + 写 store |
 | `ClaudeSession.attach(name)` | 从 store 读记录 → tmux attach |
 | `send(text, enter)` | 非阻塞，直接 `transport.send_keys()` |
-| `send_and_wait(text, timeout)` | send → `wait_ready()` → `extract_last_response()` |
+| `send_and_wait(text, timeout)` | send → 等待内容变化 → `wait_ready()` → 检查 permission → `extract_last_response()` |
 | `wait_ready(timeout)` | polling loop，调用 `detect_ready()`，超时抛 `SessionTimeoutError` |
 | `capture()` | `transport.capture()` + ANSI strip，返回全量文本 |
 | `tail(lines)` | 同上，只返回最后 N 行 |
 | `new_output_since_last_capture()` | diff 上次 capture 游标，返回增量 |
+| `detect_choices()` | 检测当前是否有交互选择菜单 |
 | `interrupt()` | `send_ctrl('c')` |
 | `is_ready()` | 非阻塞，`detect_ready(elapsed=999)` |
 | `is_alive()` | `transport.is_alive()` |
 | `kill()` | `transport.kill()` + `store.delete()` |
 
-**`send_and_wait()` 内部流程**:
+**`send_and_wait()` 内部流程（含 permission 检测）**:
 
 ```
+capture(before)    # 记录发送前状态
 send(text)
   ↓
-sleep(initial_delay)          # 给 Claude 时间开始输出，避免过早 stability 误判
+等待 pane 内容变化   # 避免旧 prompt 误判 ready
   ↓
-loop:
-  snapshot = transport.capture()
-  result = detect_ready(snapshot.lines, prev_lines, elapsed)
-  if result.is_ready:
-      return extract_last_response(snapshot.lines)
-  if elapsed > timeout:
-      raise SessionTimeoutError
-  prev_lines = snapshot.lines
-  sleep(poll_interval)        # 默认 300ms
+wait_ready(timeout)
+  ↓
+detect_permission()  # 检查是否是权限提示而非完成
+  ↓ 如果是 permission
+  返回 "[PERMISSION_REQUIRED] ..."
+  ↓ 如果不是
+extract_last_response()  # 提取 Claude 的回复
 ```
 
 ---
@@ -290,19 +378,115 @@ loop:
 
 ---
 
-### 2.7 `cli.py` — ccc CLI
+### 2.7 `relay.py` — RelayOrchestrator
+
+**职责**: 编排两个 Claude 实例之间的交互，支持两种模式。
+
+**数据模型**:
+
+```python
+class RelayMode(Enum):
+    DEBATE = "debate"    # 辩论模式
+    COLLAB = "collab"    # 协作模式（开发+评审）
+
+@dataclass
+class RelayRole:
+    name: str            # 角色名称
+    system_prompt: str   # 角色 system prompt
+    model: str = ""      # 可选模型
+
+@dataclass
+class RelayConfig:
+    mode: RelayMode
+    role_a: RelayRole
+    role_b: RelayRole
+    initial_topic: str = ""       # debate 模式的话题
+    task_description: str = ""    # collab 模式的任务描述
+    max_rounds: int = 5
+    round_timeout: float = 300.0
+    transport_mode: TransportMode = TransportMode.STREAM_JSON
+    cwd: str = "."
+    allowed_tools: list[str] = []
+    verbose: bool = False
+
+@dataclass
+class RelayResult:
+    mode: str
+    rounds_completed: int
+    final_state: str          # "completed" | "max_rounds" | "lgtm"
+    transcript: list[RelayTurn]
+    total_cost_usd: float
+    start_time: float
+    end_time: float
+    history_path: str
+```
+
+**debate 流程**:
+1. 给 A 发送话题 → 收到 A 的观点
+2. 将 A 的观点作为上下文发给 B → 收到 B 的反驳
+3. 将 B 的反驳发给 A → 收到 A 的回应
+4. 重复直到达到 max_rounds
+
+**collab 流程**:
+1. 给 Developer 发送任务 → 收到代码
+2. 将代码发给 Reviewer → 收到评审意见
+3. 如果 Reviewer 说 "LGTM" → 结束
+4. 否则将评审意见发回 Developer → 重复
+
+支持 tmux 和 stream-json 两种 transport 模式。
+
+---
+
+### 2.8 `cli.py` — ccc CLI
 
 `ccc` 命令行入口（Typer），对应核心包功能的 shell 级封装：
 
-| 命令 | 对应 API |
+#### Session 生命周期
+
+| 命令 | 对应 API | 说明 |
+|---|---|---|
+| `ccc run <name> --cwd DIR [--cursor] [--model M]` | `ClaudeSession.create()` | 支持 Claude 和 Cursor 后端 |
+| `ccc attach <name>` | `ClaudeSession.attach()` | |
+| `ccc send <name> "message" [--no-wait] [-A]` | `session.send_and_wait()` | `--auto-approve` 自动批准权限 |
+| `ccc tail <name> -n 40 [--full]` | `session.tail()` | `--full` 包含滚动缓冲区 |
+| `ccc last <name> [--raw]` | `extract_last_response()` | 使用 scrollback 提取 |
+| `ccc ps` | `store.list_all()` | 显示 backend 和 alive 状态 |
+| `ccc status <name> [--porcelain]` | `detect_ready()` + `detect_permission()` | 支持 approval/choosing 状态 |
+| `ccc kill <name>` | `session.kill()` | |
+| `ccc clean [--yes] [--dry-run]` | `store.delete()` | 清理已死 session 记录 |
+| `ccc interrupt <name>` | `session.interrupt()` | |
+| `ccc model <name> [model]` | `detect_model_picker()` | 列出或切换模型 |
+| `ccc approve <name> [yes\|always\|no]` | `detect_permission()` | 处理两种权限格式 |
+
+#### Agent 控制原语
+
+| 命令 | 说明 |
 |---|---|
-| `ccc run <name> --cwd DIR` | `ClaudeSession.create()` |
-| `ccc attach <name>` | `ClaudeSession.attach()` |
-| `ccc send <name> "message"` | `session.send_and_wait()` |
-| `ccc tail <name> -n 40` | `session.tail()` |
-| `ccc ps` | `store.list_all()` |
-| `ccc kill <name>` | `session.kill()` |
-| `ccc interrupt <name>` | `session.interrupt()` |
+| `ccc input <name> <text> [--no-enter]` | 发送任意文本（slash 命令、部分输入等） |
+| `ccc key <name> <keys> [--repeat N]` | 发送特殊键（Enter, Escape, Tab, 方向键, C-c 等） |
+| `ccc read <name> [--json] [--full] [--heartbeat]` | 结构化读取 pane 状态（state, permission, choices, lines） |
+| `ccc wait <name> <state> [--timeout T] [--heartbeat]` | 阻塞等待目标状态（ready, approval, choosing, thinking, generating, any-change） |
+
+**Agent loop 模式**:
+```bash
+# send → wait → read → decide → act → repeat
+ccc send myproject "build the app" --no-wait
+ccc wait myproject ready --timeout 300
+ccc read myproject --json  # 检查结果 + 检测权限提示
+```
+
+#### Relay 子命令
+
+| 命令 | 说明 |
+|---|---|
+| `ccc relay debate "topic" [--role-a] [--role-b] [-r N]` | 辩论模式 |
+| `ccc relay collab "task" [--dev] [--reviewer] [-r N]` | 协作模式 |
+
+#### Stream-json 模式
+
+| 命令 | 说明 |
+|---|---|
+| `ccc stream "prompt" [--cwd] [--tools] [--model] [--raw]` | 单次查询，无需 tmux |
 
 ---
 
@@ -315,6 +499,9 @@ loop:
 | ready detection | 三层叠加策略 | 单一策略鲁棒性不够，三层互补 | 仅靠 stability：延迟高；仅靠 prompt：跨版本脆 |
 | 会话持久化 | JSON 文件 | 零依赖，atomic write，轻量 | SQLite：overkill；内存：进程重启丢失 |
 | 输出协议（demo） | SSE | 单向流，浏览器原生支持，无需 WS 握手 | WebSocket：双向但过重；长轮询：延迟高 |
+| 权限处理 | 格式匹配 + 按键模拟 | 两种格式各有不同的交互方式（单键 vs 数字导航） | 始终用 `y`/`n`：不兼容 Format B |
+| Relay transport | 默认 stream-json | 单次交互更适合 relay 场景，无需持久 tmux session | 始终用 tmux：重且需要清理 |
+| 活动检测 | heartbeat（多次快照） | 可区分 thinking vs generating，单次快照做不到 | 纯 regex：无法检测"输出正在生成" |
 
 ---
 
@@ -395,6 +582,20 @@ def test_arrow_choice_menu():
 
 def test_no_choice_menu_returns_none():
     assert detect_choices(["Hello, how can I help?"]) is None
+
+# permission 检测
+def test_permission_format_a():
+    lines = ["⏺ Claude wants to run: Bash(date)", "  Allow Bash?",
+             "❯ Allow once", "  Allow always", "  Deny"]
+    perm = detect_permission(lines)
+    assert perm is not None
+    assert perm.tool == "Bash"
+
+def test_permission_format_b():
+    lines = ["Bash command", "   date", "Do you want to proceed?",
+             "❯ 1. Yes", "  2. No"]
+    perm = detect_permission(lines)
+    assert perm is not None
 
 # diff_output
 def test_diff_output_append():
@@ -546,6 +747,12 @@ def test_list_all(tmp_path):
     store.save(SessionRecord(name="b", tmux_session_name="ccc-b", cwd="."))
     assert {r.name for r in store.list_all()} == {"a", "b"}
 
+def test_backend_field_persisted(tmp_path):
+    store = SessionStore(tmp_path / "sessions.json")
+    store.save(SessionRecord(name="c", tmux_session_name="ccc-c", cwd=".", backend="cursor"))
+    got = store.get("c")
+    assert got.backend == "cursor"
+
 def test_atomic_write_survives_concurrent_read(tmp_path):
     # 写完后文件应是合法 JSON，不应出现半写状态
     store = SessionStore(tmp_path / "sessions.json")
@@ -608,6 +815,7 @@ def test_attach_survives_process_restart(tmp_path):
 | `transport.py` | ≥ 80% | libtmux mock 覆盖主流程；部分错误路径依赖集成测试 |
 | `session.py` | ≥ 80% | mock transport 覆盖主流程 |
 | `manager.py` | ≥ 75% | mock session 覆盖主流程 |
+| `relay.py` | ≥ 70% | mock transport 覆盖两种模式的主流程 |
 | `cli.py` | ≥ 60% | Typer CLI，可用 `CliRunner` 补充 |
 
 运行方式：
@@ -622,7 +830,10 @@ pytest tests/unit/ --cov=claude_cli_connector --cov-report=term-missing
 | 风险 | 影响 | 缓解措施 |
 |---|---|---|
 | `capture-pane` 是屏幕快照，非原始字节流 | prompt pattern 可能随 Claude CLI 版本变化失效 | `_PROMPT_PATTERNS` 设为可配置，用户可自定义 |
-| `send-keys` 与 `capture-pane` 之间存在 race condition | 偶发性读到旧输出 | `initial_delay` + stability 双重保障 |
+| `send-keys` 与 `capture-pane` 之间存在 race condition | 偶发性读到旧输出 | `initial_delay` + stability 双重保障 + 发送后等待内容变化 |
 | CJK 字符渲染宽度与 ASCII 不同 | 输出在窄终端里 wrap 导致乱序 | pane width 默认 220，文档注明 |
 | Claude CLI 版本更新后 prompt 格式变化 | ready detection 失效 | CI 中跑集成测试检测回归 |
 | tmux 版本差异（< 3.0） | `capture-pane` 参数不兼容 | 文档注明最低版本，启动时检查 |
+| 权限提示格式可能随版本变化 | `detect_permission()` 失效 | 同时支持 Format A 和 Format B，新格式出现时可扩展 |
+| Relay 长时间运行可能累积 cost | 未预期的 API 费用 | `max_rounds` 限制 + `RelayResult` 返回总 cost |
+| libtmux API 不稳定 | `kill_session()` → `kill()`, `find_where()` 移除 | 使用 `getattr` 降级和 `sessions.get()` 替代 |

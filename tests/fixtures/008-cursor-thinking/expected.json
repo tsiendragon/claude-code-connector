@@ -1,0 +1,17 @@
+{
+  "description": "Cursor Agent actively generating — spinner/Generating visible",
+  "backend": "cursor",
+  "detectReady": {
+    "isReady": true,
+    "confidence": "stable"
+  },
+  "detectReadySingleFrame": {
+    "isReady": false,
+    "confidence": "not_ready"
+  },
+  "extractLastResponse": "Cursor Agent v2026.02.27-e7d2ef6\n  /private/tmp\n  (cwd is not a git repository, cursor rules and ignore files don't apply)\n ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐\n │ → write a 3-paragraph essay on the philosophy of software testing                                                                                                                                                      │\n └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘\n  Claude 4.6 Opus (Thinking)\n  / commands · @ files · ! shell",
+  "detectPermission": null,
+  "classifyWindow": {
+    "state": "ready"
+  }
+}

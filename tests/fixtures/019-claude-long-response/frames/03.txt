@@ -1,0 +1,48 @@
+
+⏺ Here are some key skills for getting the most out of Claude Code CLI today:
+
+  Workflow Efficiency
+
+  - Parallel tool calls — Claude Code can run multiple independent operations simultaneously (file reads, searches, etc.), dramatically speeding up exploration and edits.
+  - Agent delegation — Use subagents for complex research tasks to keep your main context clean. Great for exploring large codebases or running tests in the background.
+  - Background tasks — Long-running commands (builds, test suites) can run in the background while you continue working.
+
+  Code Navigation & Editing
+
+  - Targeted searches — Use natural language to describe what you're looking for rather than exact filenames. Claude Code combines glob, grep, and file reads to find what you need.
+  - Surgical edits — Prefer small, precise edits over full file rewrites. This reduces risk and makes changes easier to review.
+  - Read before edit — Always let Claude Code read a file before modifying it to understand context and avoid breaking things.
+
+  Slash Commands & Skills
+
+  - /commit — Auto-generates well-structured commit messages from your staged changes
+  - /simplify — Reviews your changed code for quality, reuse, and efficiency
+  - /claude-api — Specialized help when building apps with the Anthropic SDK
+  - /help — Quick reference for features and capabilities
+
+  Power User Tips
+
+  - CLAUDE.md files — Put project conventions, preferred tools, and coding standards in a CLAUDE.md at your repo root. Claude Code reads it automatically every session.
+  - Hooks — Configure shell commands that run in response to events (e.g., auto-lint on file save).
+  - MCP servers — Connect external tools (databases, APIs, docs) directly into your Claude Code session for seamless integration.
+  - Plan mode — For complex tasks, enter plan mode first to design the approach before writing code.
+  - Worktrees — Run agents in isolated git worktrees so experimental changes don't touch your working branch.
+
+  Communication Style
+
+  - Be specific — "Fix the null check in parseConfig" beats "fix the bug"
+  - Scope your requests — Smaller, well-defined tasks get better results than vague mega-requests
+  - Iterate — Start simple, review the output, then refine. Claude Code works best as a conversation.
+
+  Context Management
+
+  - Memory files — Ask Claude Code to remember preferences across sessions (e.g., "always use pnpm", "prefer functional style")
+  - Keep context lean — For long sessions, delegate heavy exploration to subagents to avoid filling the context window
+
+  The biggest skill is knowing when to let Claude Code do the heavy lifting (multi-file refactors, test generation, codebase exploration) versus when to be hands-on (architecture decisions, security-sensitive
+  code).
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ? for shortcuts

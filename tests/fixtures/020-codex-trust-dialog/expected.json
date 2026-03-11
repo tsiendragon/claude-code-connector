@@ -1,0 +1,23 @@
+{
+  "description": "Codex workspace trust dialog — › numbered choice menu",
+  "backend": "codex",
+  "detectReady": {
+    "isReady": false,
+    "confidence": "not_ready"
+  },
+  "extractLastResponse": "",
+  "detectPermission": null,
+  "detectChoices": [
+    {
+      "label": "1. Yes, continue",
+      "selected": true
+    },
+    {
+      "label": "2. No, quit",
+      "selected": false
+    }
+  ],
+  "classifyWindow": {
+    "state": "choosing"
+  }
+}

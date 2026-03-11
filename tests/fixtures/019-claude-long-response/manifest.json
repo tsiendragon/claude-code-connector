@@ -1,0 +1,25 @@
+{
+  "backend": "claude",
+  "scenario": "long-response",
+  "description": "Claude after long response — user input scrolled out of buffer",
+  "captured_at": "2026-03-11T00:47:16.957Z",
+  "ccc_session": "apple",
+  "frame_interval_ms": 200,
+  "frames": [
+    {
+      "file": "01.txt",
+      "elapsed_ms": 0,
+      "label": "t=0"
+    },
+    {
+      "file": "02.txt",
+      "elapsed_ms": 200,
+      "label": "t+200ms"
+    },
+    {
+      "file": "03.txt",
+      "elapsed_ms": 400,
+      "label": "t+400ms"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Text typed into ❯ input box but not yet submitted",
+  "backend": "claude",
+  "detectReady": {
+    "isReady": false,
+    "confidence": "not_ready"
+  },
+  "extractLastResponse": "def apply_twice(f, x):\n      return f(f(x))\n  print(apply_twice(lambda x: x * 2, 3))  # 12\n  // Rust — closures and iterators\n  let apply_twice = |f: &dyn Fn(i32) -> i32, x| f(f(x));\n  println!(\"{}\", apply_twice(&|x| x * 2, 3)); // 12\n  // Idiomatic Rust: iterator chains\n  let result: Vec<i32> = (1..=5)\n      .filter(|x| x % 2 == 0)\n      .map(|x| x * x)\n      .collect(); // [4, 16]\n  -- Haskell — function composition is the default mode\n  applyTwice :: (a -> a) -> a -> a\n  applyTwice f = f . f\n  result = applyTwice (*2) 3  -- 12\n  evensSquared :: [Int]\n  evensSquared = map (^2) . filter even $ [1..5]  -- [4,16]\n  ---\n  When to Use Each\n  Neither paradigm is universally superior. OOP excels at modeling entities with identity, lifecycle, and behavioral variation — GUIs, game engines, domain-rich business systems. FP excels where correctness, testability,\n   and concurrency matter — compilers, data pipelines, distributed systems, financial logic. The most capable engineers are fluent in both. Rust is arguably the most honest about this: it provides zero-cost abstractions\n  for both styles, lets you mutate when you must, and pushes you toward immutability when you can. The question is never \"which paradigm?\" but \"which paradigm fits this problem?\" — and the answer is frequently both,\n  applied at different layers of the same system.\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▪▪▪ ─\n❯ this is a test of the composed input state\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+  "detectPermission": null,
+  "detectComposedInput": "this is a test of the composed input state",
+  "classifyWindow": {
+    "state": "composed"
+  }
+}

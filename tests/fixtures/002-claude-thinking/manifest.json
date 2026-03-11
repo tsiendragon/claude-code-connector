@@ -1,0 +1,15 @@
+{
+  "backend": "claude",
+  "scenario": "thinking",
+  "description": "Claude Code actively processing — spinner/Spelunking visible",
+  "captured_at": "2026-03-10T00:00:00Z",
+  "ccc_session": "fixture-claude",
+  "frame_interval_ms": 150,
+  "frames": [
+    { "file": "01.txt", "elapsed_ms": 0,   "label": "spinner frame 1" },
+    { "file": "02.txt", "elapsed_ms": 150,  "label": "spinner frame 2" },
+    { "file": "03.txt", "elapsed_ms": 300,  "label": "spinner frame 3" },
+    { "file": "04.txt", "elapsed_ms": 450,  "label": "spinner frame 4" },
+    { "file": "05.txt", "elapsed_ms": 600,  "label": "spinner frame 5" }
+  ]
+}

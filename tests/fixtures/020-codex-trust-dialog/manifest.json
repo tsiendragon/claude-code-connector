@@ -1,0 +1,13 @@
+{
+  "backend": "codex",
+  "scenario": "trust-dialog",
+  "description": "Codex workspace trust dialog — › numbered choice menu",
+  "captured_at": "2026-03-11T00:00:00Z",
+  "ccc_session": "fixture-codex",
+  "frame_interval_ms": 200,
+  "frames": [
+    { "file": "01.txt", "elapsed_ms": 0,   "label": "trust dialog t=0" },
+    { "file": "02.txt", "elapsed_ms": 200,  "label": "trust dialog t+200ms" },
+    { "file": "03.txt", "elapsed_ms": 400,  "label": "trust dialog t+400ms" }
+  ]
+}

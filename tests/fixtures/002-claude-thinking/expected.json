@@ -1,0 +1,27 @@
+{
+  "description": "Claude Code actively processing — spinner/Spelunking visible",
+  "backend": "claude",
+  "detectReady": {
+    "isReady": false,
+    "confidence": "not_ready"
+  },
+  "extractLastResponse": "{ customer: \"Alice\", amount: 120, status: \"completed\" },\n    { customer: \"Bob\",   amount: 45,  status: \"pending\"   },\n    { customer: \"Alice\", amount: 80,  status: \"completed\" },\n    { customer: \"Carol\", amount: 200, status: \"completed\" },\n  ];\n  const totalByCompletedCustomer = orders\n    .filter(o => o.status === \"completed\")\n    .reduce((acc, o) => ({\n      ...acc,\n      [o.customer]: (acc[o.customer] ?? 0) + o.amount\n    }), {});\n  // { Alice: 200, Carol: 200 }\n  An OOP approach to the same problem would typically model Order and Customer classes with methods, and accumulate results through iteration over object collections. The FP pipeline is often more concise for\n  data-centric transformations, but the OOP model more naturally enforces invariants and encapsulates complex business logic that grows over time. The practical reality is that modern languages blur this distinction:\n  Java's Streams API, C#'s LINQ, Python's list comprehensions, and Kotlin's collection extensions all bring functional data transformation idioms into predominantly OOP languages.\n  ---\n  V. Choosing a Paradigm — or Both\n  The dichotomy between OOP and FP is increasingly a false one. Modern languages — Scala, Kotlin, Swift, Rust, F#, and even Python and JavaScript — are deliberately multi-paradigm, recognizing that each style has genuine\n   strengths. OOP shines when modeling systems with rich domain entities, complex lifecycles, and behavioral variation by type: GUIs, game engines, and enterprise business domains are natural fits. FP shines when\n  correctness, testability, and concurrent safety are paramount: data pipelines, compilers, financial systems, and distributed systems benefit enormously from immutability and pure functions. The most pragmatic position\n  is not allegiance to one paradigm but fluency in both. Use objects to model entities with identity and lifecycle; use pure functions to model transformations and computations. The skill lies not in picking a side but\n  in recognizing which tool fits the problem at hand — and in understanding the trade-offs clearly enough to make that choice deliberately rather than by habit.\n✻ Worked for 37s\n❯ write a detailed 500-word essay comparing functional and OOP with many code examples in multiple languages including haskell rust java python and javascript\n· Spelunking…\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▪▪▪ ─\n❯ \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  esc to interrupt",
+  "detectPermission": null,
+  "classifyWindow": {
+    "state": "thinking"
+  },
+  "awaitFrameMatch": [
+    {
+      "description": "waitReady never matches while actively thinking",
+      "predicate": "ready",
+      "expectMatch": false
+    },
+    {
+      "description": "waitState thinking matches at first full window",
+      "predicate": "thinking",
+      "expectMatch": true,
+      "matchIndex": 2,
+      "matchState": "thinking"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+
+  This epistemic humility has practical consequences for how we think about test design. A naive view treats testing as verification — confirming that software does what we intend. But the richer view treats it as
+  exploration — probing the gap between what we specified and what we actually built, and between what we built and what the world will do to it. Edge cases, adversarial inputs, and unexpected interactions are not
+  annoyances to be tolerated; they are the primary terrain of interest. This is why testing is as much a design activity as a quality activity. Writing tests forces us to articulate assumptions we didn't know we were
+  making, and surfaces ambiguities in requirements that would otherwise lie dormant until production. The test suite becomes a model of our understanding of the problem, not merely a guard against regression.
+
+  Underlying all of this is a question of values: what does it mean for software to be good enough? Testing cannot answer this question on its own — it can only measure against criteria we supply. The choice of what to
+  test, how thoroughly, and at what cost reflects a set of priorities about reliability, safety, and the acceptable distribution of risk. Safety-critical systems demand near-exhaustive coverage because the cost of
+  failure is human life; a prototype warrants far less. This means testing is ultimately an ethical and economic practice as much as a technical one. Engineers who test well are not simply being methodical — they are
+  making judgments about responsibility, about who bears the cost of failure, and about what obligations we owe to the people who depend on our work. Software testing, then, is not a phase of development. It is a
+  continuous act of intellectual honesty.
+
+❯ this is a test of the composed input state
+
+⏺ Got it — message received. Looks like it came through fine. What would you like to do?
+
+❯ this is a test of the composed input state
+
+⏺ Message received clearly. What can I help you with?
+
+❯ composed input test text
+
+⏺ Received. Anything I can help with?
+
+❯ typed not submitted
+
+⏺ Got it — you're testing input that's typed but not yet submitted. Everything looks normal on my end. Let me know when you're ready to send a real message!
+
+❯ this is a test of the composed input state
+
+⏺ Received. Let me know what you need!
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▪▪▪ ─
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ? for shortcuts

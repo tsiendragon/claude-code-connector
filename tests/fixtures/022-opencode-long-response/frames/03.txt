@@ -1,0 +1,48 @@
+  ┃  # Wrote weather.py
+  ┃                                                                                                                                                                           Context
+  ┃    1 import requests                                                                                                                                                      13,599 tokens
+  ┃    2 import sys                                                                                                                                                           7% used
+  ┃    3                                                                                                                                                                      $0.00 spent
+  ┃    4 def get_weather(city):
+  ┃    5     url = f"https://wttr.in/{city}?format=j1"                                                                                                                        LSP
+  ┃    6     try:                                                                                                                                                             • pyright
+  ┃    7         response = requests.get(url, timeout=10)
+  ┃    8         if response.status_code == 200:                                                                                                                              Modified Files
+  ┃    9             data = response.json()                                                                                                                                   weather.py                        +26
+  ┃   10             current = data["current_condition"][0]
+  ┃   11             print(f"\nWeather in {city}:")
+  ┃   12             print(f"Temperature: {current['temp_C']}°C ({current['temp_F']}°F)")
+  ┃   13             print(f"Condition: {current['weatherDesc'][0]['value']}")
+  ┃   14             print(f"Humidity: {current['humidity']}%")
+  ┃   15             print(f"Wind: {current['windspeedKmph']} km/h")
+  ┃   16         else:
+  ┃   17             print(f"Error: Could not fetch weather for {city}")
+  ┃   18     except Exception as e:
+  ┃   19         print(f"Error: {e}")
+  ┃   20
+  ┃   21 if __name__ == "__main__":
+  ┃   22     if len(sys.argv) > 1:
+  ┃   23         city = " ".join(sys.argv[1:])
+  ┃   24     else:
+  ┃   25         city = input("Enter city name: ")
+  ┃   26     get_weather(city)
+  ┃   27
+  ┃
+
+  ┃  Thinking: I've written a Python script that uses wttr.in (a free weather service that doesn't require an API key). The user can run it with a city name as
+  ┃  argument or it will prompt for input.
+
+     Done. Run with:
+
+     python weather.py "City Name"
+
+     Uses wttr.in (no API key needed). Tell me the city when ready.                                                                                                      ▄
+                                                                                                                                                                         █
+     ▣  Build · MiniMax-M2.5 · 22.8s                                                                                                                                     █
+
+  ┃
+  ┃
+  ┃
+  ┃  Build  MiniMax-M2.5 MiniMax Coding Plan (minimax.io)                                                                                                                     ~/repos/tsienclaw:main
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                                                                                                               tab agents  ctrl+p commands    • OpenCode 1.2.24

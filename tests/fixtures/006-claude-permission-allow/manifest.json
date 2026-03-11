@@ -1,0 +1,14 @@
+{
+  "backend": "claude",
+  "scenario": "permission",
+  "description": "Claude Code Bash tool permission dialog — Do you want to proceed? (❯ 1. Yes / 2. Yes always / 3. No)",
+  "captured_at": "2026-03-10T00:00:00Z",
+  "ccc_session": "fixture-claude-perm",
+  "frame_interval_ms": 200,
+  "frames": [
+    { "file": "01.txt", "elapsed_ms": 0,   "label": "permission dialog t=0" },
+    { "file": "02.txt", "elapsed_ms": 200,  "label": "permission dialog t+200ms" },
+    { "file": "03.txt", "elapsed_ms": 400,  "label": "permission dialog t+400ms" }
+  ],
+  "notes": "Dialog was denied (option 3) after capture to keep session clean"
+}

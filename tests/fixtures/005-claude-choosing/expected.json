@@ -1,0 +1,44 @@
+{
+  "description": "Claude Code workspace trust dialog — numbered choice menu (❯ 1. Yes / 2. No)",
+  "backend": "claude",
+  "detectReady": {
+    "isReady": false,
+    "confidence": "not_ready"
+  },
+  "extractLastResponse": "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n Accessing workspace:\n /Users/mj\n Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not, take a moment to review what's in this folder first.\n Claude Code'll be able to read, edit, and execute files here.\n Security guide\n ❯ 1. Yes, I trust this folder\n   2. No, exit\n Enter to confirm · Esc to cancel",
+  "detectPermission": null,
+  "detectChoices": [
+    {
+      "label": "1. Yes, I trust this folder",
+      "selected": true
+    },
+    {
+      "label": "2. No, exit",
+      "selected": false
+    }
+  ],
+  "detectModelPicker": [
+    {
+      "key": "1",
+      "label": "Yes,",
+      "selected": true
+    },
+    {
+      "key": "2",
+      "label": "No,",
+      "selected": false
+    }
+  ],
+  "classifyWindow": {
+    "state": "choosing"
+  },
+  "awaitFrameMatch": [
+    {
+      "description": "waitReady matches choosing state (waitReady accepts choosing)",
+      "predicate": "choosing",
+      "expectMatch": true,
+      "matchIndex": 2,
+      "matchState": "choosing"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+
+  ┃                                                                                                                                                                            █    New session - 2026-03-10T15:22:34.
+  ┃  write a very long and detailed 10-paragraph essay on the philosophy of software testing with examples from real projects                                                  █    811Z
+  ┃                                                                                                                                                                            █
+                                                                                                                                                                               █    Context
+     ▣  Build · MiniMax-M2.5                                                                                                                                                   █    0 tokens
+                                                                                                                                                                               █    0% used
+                                                                                                                                                                               █    $0.00 spent
+                                                                                                                                                                               █
+                                                                                                                                                                               █    LSP
+                                                                                                                                                                               █    LSPs will activate as files are read
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+                                                                                                                                                                               █
+
+  ┃
+  ┃
+  ┃
+  ┃  Build  MiniMax-M2.5 MiniMax Coding Plan (minimax.io)                                                                                                                           /private/tmp
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ⬝⬝■■■■■■  esc interrupt                                                                                                                           tab agents  ctrl+p commands    • OpenCode 1.2.24

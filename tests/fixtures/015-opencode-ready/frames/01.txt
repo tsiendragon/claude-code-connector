@@ -1,0 +1,49 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                            ▄
+                                                                                           █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+                                                                                           █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+                                                                                           ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+
+
+                                                                         ┃
+                                                                         ┃  Ask anything... "What is the tech stack of this project?"
+                                                                         ┃
+                                                                         ┃  Build  MiniMax-M2.5 MiniMax Coding Plan (minimax.io)
+                                                                         ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                                                                                         tab agents  ctrl+p commands
+
+
+
+                                                                                  ● Tip Use --print-logs flag to see detailed logs in stderr
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /private/tmp                                                                                                                                                                                                      1.2.20

@@ -1,0 +1,39 @@
+{
+  "description": "OpenCode transition from ready to thinking — spinner visible",
+  "backend": "opencode",
+  "detectReady": {
+    "isReady": false,
+    "confidence": "not_ready"
+  },
+  "detectReadySingleFrame": {
+    "isReady": false,
+    "confidence": "not_ready"
+  },
+  "extractLastResponse": "",
+  "detectPermission": null,
+  "classifyWindow": {
+    "state": "thinking"
+  },
+  "awaitFrameMatch": [
+    {
+      "description": "waitState thinking matches at first full window",
+      "predicate": "thinking",
+      "expectMatch": true,
+      "matchIndex": 2,
+      "matchState": "thinking"
+    },
+    {
+      "description": "beforeText skips frame:01 (ready), shifts window forward",
+      "predicate": "thinking",
+      "beforeText": "frame:01",
+      "expectMatch": true,
+      "matchIndex": 3,
+      "matchState": "thinking"
+    },
+    {
+      "description": "waitReady never matches during thinking transition",
+      "predicate": "ready",
+      "expectMatch": false
+    }
+  ]
+}

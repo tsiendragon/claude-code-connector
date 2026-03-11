@@ -1,0 +1,27 @@
+{
+  "description": "Claude Code idle at ❯ prompt — stable ready state",
+  "backend": "claude",
+  "detectReady": {
+    "isReady": true,
+    "confidence": "prompt"
+  },
+  "extractLastResponse": "⏺ Received. Let me know what you need!",
+  "detectPermission": null,
+  "classifyWindow": {
+    "state": "ready"
+  },
+  "awaitFrameMatch": [
+    {
+      "description": "waitReady matches immediately on stable ready frames",
+      "predicate": "ready",
+      "expectMatch": true,
+      "matchIndex": 2,
+      "matchState": "ready"
+    },
+    {
+      "description": "waitState thinking never matches on ready frames",
+      "predicate": "thinking",
+      "expectMatch": false
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "description": "Claude Code Bash tool permission dialog — Do you want to proceed? (❯ 1. Yes / 2. Yes always / 3. No)",
+  "backend": "claude",
+  "detectReady": {
+    "isReady": false,
+    "confidence": "not_ready"
+  },
+  "extractLastResponse": "│                                          │ Tips for getting started                             │\n│           Welcome back Lilong!           │ Ask Claude to create a new app or clone a repository │\n│                                          │ ──────────────────────────────────────────────────── │\n│                  ▐▛███▜▌                 │ Recent activity                                      │\n│                 ▝▜█████▛▘                │ No recent activity                                   │\n│                   ▘▘ ▝▝                  │                                                      │\n│                                          │                                                      │\n│   Sonnet 4.6 · Claude Enterprise · OKG   │                                                      │\n│   /private/tmp/fixture-perm-1773154158   │                                                      │\n╰─────────────────────────────────────────────────────────────────────────────────────────────────╯\n❯ run bash: ls -la /etc/hosts\n  Reading 1 file… (ctrl+o to expand)\n  ⎿  ls -la /etc/hosts\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n Bash command\n   ls -la /etc/hosts\n   List /etc/hosts file details\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, allow reading from etc/ from this project\n   3. No\n Esc to cancel · Tab to amend · ctrl+e to explain",
+  "detectPermission": {
+    "type": "proceed",
+    "tool": "List /etc/hosts file details",
+    "options": [
+      {
+        "key": "yes",
+        "label": "Yes",
+        "selected": true,
+        "index": 0
+      },
+      {
+        "key": "always",
+        "label": "Yes, allow reading from etc/ from this project",
+        "selected": false,
+        "index": 1
+      },
+      {
+        "key": "no",
+        "label": "No",
+        "selected": false,
+        "index": 2
+      }
+    ]
+  },
+  "detectChoices": [
+    {
+      "label": "run bash: ls -la /etc/hosts",
+      "selected": true
+    },
+    {
+      "label": "Reading 1 file… (ctrl+o to expand)",
+      "selected": false
+    },
+    {
+      "label": "⎿  ls -la /etc/hosts",
+      "selected": false
+    }
+  ],
+  "detectModelPicker": [
+    {
+      "key": "1",
+      "label": "Yes",
+      "selected": true
+    },
+    {
+      "key": "2",
+      "label": "Yes,",
+      "selected": false
+    },
+    {
+      "key": "3",
+      "label": "No",
+      "selected": false
+    }
+  ],
+  "classifyWindow": {
+    "state": "thinking"
+  }
+}

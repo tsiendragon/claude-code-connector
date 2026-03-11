@@ -1,0 +1,13 @@
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.113.0)                  │
+│                                             │
+│ model:     gpt-5.3-codex   /model to change │
+│ directory: ~/repos/tsienclaw               │
+╰─────────────────────────────────────────────╯
+
+
+› singapore
+
+Working (0s • esc to interrupt)
+
+  gpt-5.3-codex default · 100% left · ~/repos/tsienclaw

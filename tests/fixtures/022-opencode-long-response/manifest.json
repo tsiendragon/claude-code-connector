@@ -1,0 +1,13 @@
+{
+  "backend": "opencode",
+  "scenario": "long-response",
+  "description": "OpenCode after long response with code block, thinking, and sidebar — tests full content extraction",
+  "captured_at": "2026-03-11T00:00:00Z",
+  "ccc_session": "apple",
+  "frame_interval_ms": 200,
+  "frames": [
+    { "file": "01.txt", "elapsed_ms": 0,   "label": "ready with response t=0" },
+    { "file": "02.txt", "elapsed_ms": 200,  "label": "ready t+200ms" },
+    { "file": "03.txt", "elapsed_ms": 400,  "label": "ready t+400ms" }
+  ]
+}

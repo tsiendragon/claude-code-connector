@@ -1,0 +1,13 @@
+{
+  "description": "Codex idle after completing a response",
+  "backend": "codex",
+  "detectReady": {
+    "isReady": true,
+    "confidence": "prompt"
+  },
+  "extractLastResponse": "Software testing is ultimately a philosophy of doubt: a disciplined refusal to assume that code works just because it compiles, runs, or even passes a happy-path demo. Every program is a model of reality, and reality\nis always messier than the model. Testing, then, is not just defect hunting; it is an epistemic practice, a way of asking, “What do we really know about this system?” Good tests turn implicit assumptions into explicit\nclaims and force those claims to confront edge cases, ambiguity, and failure.\nA mature testing mindset also recognizes that certainty is not binary. Tests do not prove software is correct; they reduce uncertainty at different levels and costs. Unit tests offer precision and speed, integration\ntests reveal seams and contracts, and end-to-end tests measure behavior in conditions that resemble real use. The philosophy is not “test everything equally,” but “allocate confidence intelligently.” In this view, test\ndesign becomes an exercise in risk management: prioritize the paths where failure is costly, likely, or hard to detect in production.\nFinally, software testing is deeply social. Tests are executable communication between developers, reviewers, operators, and future maintainers. A clear test suite explains what the system promises, what it forbids,\nand what tradeoffs were accepted. It also cultivates humility: every bug found by a test is a reminder that intelligence is fallible, and that quality emerges from feedback loops, not heroics. The best testing cultures\ntreat tests not as bureaucratic gates, but as shared instruments for learning, trust, and continuous improvement.",
+  "detectPermission": null,
+  "classifyWindow": {
+    "state": "ready"
+  }
+}

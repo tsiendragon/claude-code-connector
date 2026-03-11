@@ -1,0 +1,29 @@
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.113.0)                  │
+│                                             │
+│ model:     gpt-5.3-codex   /model to change │
+│ directory: /private/tmp                     │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Use /fast to enable our fastest inference at 2X plan usage.
+
+
+› write a 3-paragraph essay on the philosophy of software testing
+
+
+• Software testing is ultimately a philosophy of doubt: a disciplined refusal to assume that code works just because it compiles, runs, or even passes a happy-path demo. Every program is a model of reality, and reality
+  is always messier than the model. Testing, then, is not just defect hunting; it is an epistemic practice, a way of asking, “What do we really know about this system?” Good tests turn implicit assumptions into explicit
+  claims and force those claims to confront edge cases, ambiguity, and failure.
+
+  A mature testing mindset also recognizes that certainty is not binary. Tests do not prove software is correct; they reduce uncertainty at different levels and costs. Unit tests offer precision and speed, integration
+  tests reveal seams and contracts, and end-to-end tests measure behavior in conditions that resemble real use. The philosophy is not “test everything equally,” but “allocate confidence intelligently.” In this view, test
+  design becomes an exercise in risk management: prioritize the paths where failure is costly, likely, or hard to detect in production.
+
+  Finally, software testing is deeply social. Tests are executable communication between developers, reviewers, operators, and future maintainers. A clear test suite explains what the system promises, what it forbids,
+  and what tradeoffs were accepted. It also cultivates humility: every bug found by a test is a reminder that intelligence is fallible, and that quality emerges from feedback loops, not heroics. The best testing cultures
+  treat tests not as bureaucratic gates, but as shared instruments for learning, trust, and continuous improvement.
+
+
+› this is a test of the composed input state
+
+  gpt-5.3-codex default · 100% left · /private/tmp

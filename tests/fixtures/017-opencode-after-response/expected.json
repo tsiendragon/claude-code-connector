@@ -1,0 +1,13 @@
+{
+  "description": "OpenCode idle after completing a response",
+  "backend": "opencode",
+  "detectReady": {
+    "isReady": true,
+    "confidence": "prompt"
+  },
+  "extractLastResponse": "write a 3-paragraph essay on the philosophy of software testing\nThinking: The user is asking me to write a 3-paragraph essay on the philosophy of software testing. This is a straightforward writing task that doesn't require any\ntools - I can answer directly based on my knowledge.\nThe Philosophy of Software Testing\nSoftware testing is fundamentally a practice of intellectual humility. At its core, testing acknowledges that human cognition is fallible—that no matter how skilled a\ndeveloper, mistakes are inevitable. Rather than viewing testing as a burden or a mere formality, the philosophical foundation of testing embraces the reality that we\ncannot perfectly foresee how complex systems will behave in every possible circumstance. This humility transforms testing from a perfunctory checkbox exercise into a\ngenuine intellectual pursuit of understanding our own limitations.\nThe philosophy of testing is also deeply tied to the concept of falsification. Following the Popperian tradition of scientific inquiry, a test does not prove\ncorrectness—it attempts to prove a system wrong. Each test that passes is not verification of truth, but rather a failure to disprove the current implementation. This\ninverted perspective is powerful: it shifts the developer's mindset from \"proving it works\" to \"trying to break it,\" fostering more robust and thoughtfully designed\nsoftware. The best tests are those that challenge assumptions and expose hidden vulnerabilities.\nFinally, software testing embodies a pragmatic philosophy of risk management. In an ideal world, we would verify every possible input and state, but practical\nconstraints demand prioritization. Testing becomes the art of allocating limited resources to maximize confidence in a system's reliability. It reflects a realistic\nacceptance that software exists within ecosystems of dependencies, user expectations, and business constraints. The philosophy teaches us that perfection is\nunattainable, but through thoughtful, systematic probing of our code, we can ship software with justified confidence rather than blind faith.",
+  "detectPermission": null,
+  "classifyWindow": {
+    "state": "ready"
+  }
+}

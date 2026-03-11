@@ -1,0 +1,17 @@
+{
+  "description": "Codex idle at input prompt — stable ready state",
+  "backend": "codex",
+  "detectReady": {
+    "isReady": true,
+    "confidence": "stable"
+  },
+  "detectReadySingleFrame": {
+    "isReady": false,
+    "confidence": "not_ready"
+  },
+  "extractLastResponse": "",
+  "detectPermission": null,
+  "classifyWindow": {
+    "state": "ready"
+  }
+}

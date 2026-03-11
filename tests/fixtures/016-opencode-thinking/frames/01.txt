@@ -1,0 +1,49 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                            ▄
+                                                                                           █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+                                                                                           █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+                                                                                           ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+
+
+                                                                         ┃
+                                                                         ┃  Ask anything... "Fix a TODO in the codebase"
+                                                                         ┃
+                                                                         ┃  Build  MiniMax-M2.5 MiniMax Coding Plan (minimax.io)
+                                                                         ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                                                                                                         tab agents  ctrl+p commands
+
+
+
+                                                                              ● Tip Use PageUp/PageDown to navigate through conversation history
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /private/tmp                                                                                                                                                                                                      1.2.24

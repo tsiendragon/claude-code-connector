@@ -1,0 +1,38 @@
+    { customer: "Alice", amount: 120, status: "completed" },
+    { customer: "Bob",   amount: 45,  status: "pending"   },
+    { customer: "Alice", amount: 80,  status: "completed" },
+    { customer: "Carol", amount: 200, status: "completed" },
+  ];
+
+  const totalByCompletedCustomer = orders
+    .filter(o => o.status === "completed")
+    .reduce((acc, o) => ({
+      ...acc,
+      [o.customer]: (acc[o.customer] ?? 0) + o.amount
+    }), {});
+
+  // { Alice: 200, Carol: 200 }
+
+  An OOP approach to the same problem would typically model Order and Customer classes with methods, and accumulate results through iteration over object collections. The FP pipeline is often more concise for
+  data-centric transformations, but the OOP model more naturally enforces invariants and encapsulates complex business logic that grows over time. The practical reality is that modern languages blur this distinction:
+  Java's Streams API, C#'s LINQ, Python's list comprehensions, and Kotlin's collection extensions all bring functional data transformation idioms into predominantly OOP languages.
+
+  ---
+  V. Choosing a Paradigm — or Both
+
+  The dichotomy between OOP and FP is increasingly a false one. Modern languages — Scala, Kotlin, Swift, Rust, F#, and even Python and JavaScript — are deliberately multi-paradigm, recognizing that each style has genuine
+   strengths. OOP shines when modeling systems with rich domain entities, complex lifecycles, and behavioral variation by type: GUIs, game engines, and enterprise business domains are natural fits. FP shines when
+  correctness, testability, and concurrent safety are paramount: data pipelines, compilers, financial systems, and distributed systems benefit enormously from immutability and pure functions. The most pragmatic position
+  is not allegiance to one paradigm but fluency in both. Use objects to model entities with identity and lifecycle; use pure functions to model transformations and computations. The skill lies not in picking a side but
+  in recognizing which tool fits the problem at hand — and in understanding the trade-offs clearly enough to make that choice deliberately rather than by habit.
+
+✻ Worked for 37s
+
+❯ write a detailed 500-word essay comparing functional and OOP with many code examples in multiple languages including haskell rust java python and javascript
+
+✶ Spelunking…
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ▪▪▪ ─
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  esc to interrupt

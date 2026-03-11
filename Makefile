@@ -1,93 +1,65 @@
-# ---------------------------------------------------------------------------
-# claude-cli-connector — developer Makefile
-# ---------------------------------------------------------------------------
-# Usage:
-#   make test        Run unit tests (default)
-#   make test-all    Run unit + integration tests (requires tmux + claude CLI)
-#   make cov         Run unit tests with coverage report
-#   make lint        Run ruff linter
-#   make fmt         Auto-fix style issues with ruff
-#   make typecheck   Run mypy static type checker
-#   make build       Build source + wheel distributions
-#   make publish     Upload to PyPI (requires twine + valid credentials)
-#   make clean       Remove build/dist/cache artefacts
-#   make install-dev Install package in editable mode with dev dependencies
-# ---------------------------------------------------------------------------
+# ccc — unified developer Makefile
+#
+#   make build          Compile TypeScript → dist/
+#   make install        Build + install ccc binary globally (npm link)
+#   make install-bun    Build with bun and copy binary to PREFIX
+#   make dev            Install Python wrapper in editable mode
+#   make test           Run Python unit tests
+#   make lint           Lint Python (ruff) + TypeScript (tsc --noEmit)
+#   make clean          Remove build artefacts
 
-.PHONY: test test-all cov lint fmt typecheck build publish clean install-dev
+.PHONY: build install install-bun dev test lint fmt clean
 
-# Python / pip to use (override with: make test PYTHON=python3.11)
+PREFIX ?= $(HOME)/.local/bin
 PYTHON ?= python
 PIP    ?= pip
 
-# Directories
-SRC_DIR   = src
-TEST_DIR  = tests
-DIST_DIR  = dist
-
 # ---------------------------------------------------------------------------
-# Development setup
+# TypeScript build
 # ---------------------------------------------------------------------------
 
-install-dev:
+build:
+	npm run build
+
+install: build
+	npm link
+
+# Bun-compiled single binary (faster startup, no node_modules at runtime)
+install-bun:
+	$(eval BUN := $(shell command -v bun 2>/dev/null || echo $(HOME)/.bun/bin/bun))
+	@if [ ! -f "$(BUN)" ]; then curl -fsSL https://bun.sh/install | bash; fi
+	$(BUN) install --frozen-lockfile
+	$(BUN) build src/cli.ts --compile --outfile ccc-bin
+	mkdir -p $(PREFIX)
+	cp -f ccc-bin $(PREFIX)/ccc
+	chmod 755 $(PREFIX)/ccc
+	rm -f ccc-bin
+	@echo "Installed: $(PREFIX)/ccc"
+
+# ---------------------------------------------------------------------------
+# Python wrapper
+# ---------------------------------------------------------------------------
+
+dev:
 	$(PIP) install -e ".[dev]" --break-system-packages
 
-# ---------------------------------------------------------------------------
-# Testing
-# ---------------------------------------------------------------------------
-
-test:
-	$(PYTHON) -m pytest $(TEST_DIR)/unit/ -v
-
-test-all:
-	$(PYTHON) -m pytest $(TEST_DIR)/unit/ $(TEST_DIR)/integration/ --run-integration -v
-
-cov:
-	$(PYTHON) -m pytest $(TEST_DIR)/unit/ \
-	    --cov=$(SRC_DIR)/claude_cli_connector \
-	    --cov-report=term-missing \
-	    --cov-report=html:htmlcov \
-	    -v
-
-# ---------------------------------------------------------------------------
-# Code quality
-# ---------------------------------------------------------------------------
+test: build
+	$(PYTHON) -m pytest tests/unit/ -v
 
 lint:
-	$(PYTHON) -m ruff check $(SRC_DIR) $(TEST_DIR)
+	$(PYTHON) -m ruff check py/ tests/
+	npx tsc --noEmit
 
 fmt:
-	$(PYTHON) -m ruff check --fix $(SRC_DIR) $(TEST_DIR)
-	$(PYTHON) -m ruff format $(SRC_DIR) $(TEST_DIR)
-
-typecheck:
-	$(PYTHON) -m mypy $(SRC_DIR)
-
-# Run all checks in sequence (used in CI / pre-push)
-check: lint typecheck test
-
-# ---------------------------------------------------------------------------
-# Build & publish
-# ---------------------------------------------------------------------------
-
-build: clean
-	$(PYTHON) -m build
-
-publish: build
-	$(PYTHON) -m twine upload $(DIST_DIR)/*
-
-# Publish to TestPyPI for validation before a real release
-publish-test: build
-	$(PYTHON) -m twine upload --repository testpypi $(DIST_DIR)/*
+	$(PYTHON) -m ruff check --fix py/ tests/
+	$(PYTHON) -m ruff format py/ tests/
 
 # ---------------------------------------------------------------------------
 # Housekeeping
 # ---------------------------------------------------------------------------
 
 clean:
-	rm -rf $(DIST_DIR) build *.egg-info src/*.egg-info
+	rm -rf dist/ py/ccc.egg-info py/*.egg-info
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete 2>/dev/null || true
-	find . -name ".coverage" -delete 2>/dev/null || true

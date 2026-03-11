@@ -1,0 +1,13 @@
+╭─────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.113.0)                  │
+│                                             │
+│ model:     gpt-5.3-codex   /model to change │
+│ directory: /private/tmp                     │
+╰─────────────────────────────────────────────╯
+
+  Tip: New Use /fast to enable our fastest inference at 2X plan usage.
+
+
+› Find and fix a bug in @filename
+
+  gpt-5.3-codex default · 100% left · /private/tmp

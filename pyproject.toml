@@ -3,14 +3,14 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "claude-cli-connector"
-version = "0.2.0"
-description = "Python connector for Claude Code CLI — supports tmux, stream-json, SDK, and ACP transport modes"
+name = "ccc"
+version = "0.3.0"
+description = "Python wrapper for the ccc CLI — manage Claude Code and Cursor sessions in tmux"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Lilong Qian", email = "lilong.qian@okg.com" }]
-keywords = ["claude", "claude-code", "tmux", "cli", "connector", "ai", "stream-json", "sdk", "acp", "agent"]
+keywords = ["claude", "claude-code", "tmux", "cli", "ccc", "agent", "cursor"]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -23,12 +23,8 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
-dependencies = [
-  "libtmux>=0.17.0",
-  "typer>=0.12.0",
-  "rich>=13.0.0",
-  "pydantic>=2.0.0",
-]
+# No runtime dependencies — delegates everything to the ccc binary
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/qianyilong/claude-cli-connector"
@@ -36,23 +32,19 @@ Repository = "https://github.com/qianyilong/claude-cli-connector"
 "Bug Tracker" = "https://github.com/qianyilong/claude-cli-connector/issues"
 
 [project.optional-dependencies]
-sdk = [
-  "claude-agent-sdk>=0.2.0",
-]
 dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
   "pytest-mock>=3.12",
-  "pytest-cov>=5.0",
   "ruff>=0.4",
   "mypy>=1.9",
 ]
 
-[project.scripts]
-ccc = "claude_cli_connector.cli:app"
-
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["py"]
+
+[tool.setuptools.package-data]
+ccc = ["py.typed"]
 
 [tool.ruff]
 line-length = 100
@@ -69,11 +61,3 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests/unit"]
-
-[tool.coverage.run]
-source = ["claude_cli_connector"]
-omit = ["*/cli.py"]
-
-[tool.coverage.report]
-show_missing = true
-fail_under = 75
