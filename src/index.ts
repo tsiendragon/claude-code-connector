@@ -50,3 +50,7 @@ export type {
 // Relay
 export { runRelay } from "./relay.js";
 export type { RelayConfig, RelayResult, RelayMode, RelayRole, RelayTurn } from "./relay.js";
+
+// Group Chat
+export { runGroupChat } from "./groupchat.js";
+export type { GroupChatConfig, AgentDef, ChatMessage } from "./groupchat.js";

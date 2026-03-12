@@ -58,6 +58,7 @@ import {
   readFullSessionHistory,
 } from "./history.js";
 import { runRelay } from "./relay.js";
+import { runGroupChat } from "./groupchat.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -773,6 +774,44 @@ const relay = defineCommand({
 });
 
 // ---------------------------------------------------------------------------
+// Group Chat
+// ---------------------------------------------------------------------------
+
+const groupchat = defineCommand({
+  meta: { description: "Multi-agent group chat (Claude + Codex + OpenCode)" },
+  args: {
+    topic: { type: "positional", required: false, description: "Discussion topic or task" },
+    cwd: { type: "string", default: process.cwd(), description: "Working directory" },
+    timeout: { type: "string", default: "120", description: "Per-message timeout in seconds" },
+    "keep-sessions": { type: "boolean", default: false, description: "Keep sessions alive on exit" },
+    "no-claude": { type: "boolean", default: false, description: "Exclude Claude" },
+    "no-codex": { type: "boolean", default: false, description: "Exclude Codex" },
+    "no-opencode": { type: "boolean", default: false, description: "Exclude OpenCode" },
+    rounds: { type: "string", default: "5", description: "Auto-run N rounds per user message" },
+  },
+  async run({ args }) {
+    const agents = [];
+    if (!args["no-claude"])
+      agents.push({ name: "Claude", sessionName: "gc-claude", backend: "claude", command: "claude", color: "magenta" });
+    if (!args["no-codex"])
+      agents.push({ name: "Codex", sessionName: "gc-codex", backend: "codex", command: "codex", color: "yellow" });
+    if (!args["no-opencode"])
+      agents.push({ name: "OpenCode", sessionName: "gc-opencode", backend: "opencode", command: "opencode", color: "green" });
+
+    if (agents.length === 0) die("At least one agent must be enabled");
+
+    await runGroupChat({
+      topic: args.topic as string | undefined,
+      cwd: args.cwd as string,
+      agents,
+      timeout: parseInt(args.timeout as string),
+      keepSessions: args["keep-sessions"] as boolean,
+      rounds: parseInt(args.rounds as string),
+    });
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Root command
 // ---------------------------------------------------------------------------
 
@@ -802,6 +841,7 @@ const main = defineCommand({
     history: historyCmd,
     stream: streamCmd,
     relay,
+    groupchat,
   },
 });
 

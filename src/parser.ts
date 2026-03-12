@@ -79,6 +79,12 @@ export function detectReady(
   // ---------------------------------------------------------------------------
 
   if (backend === "codex") {
+    // Codex busy: "Working (Ns • esc to interrupt)" — never ready.
+    for (const line of clean) {
+      if (/Working \(\d+s\b/.test(line.trim())) {
+        return { isReady: false, confidence: "not_ready", text };
+      }
+    }
     // Codex idle: › <suggestion text> at bottom, with response content above.
     // Two › lines with actual content between them = post-response ready.
     const arrowIndices: number[] = [];
@@ -96,9 +102,16 @@ export function detectReady(
       if (hasContent) return { isReady: true, confidence: "prompt", text };
     }
   } else if (backend === "opencode") {
+    // Opencode busy: "Thinking:" line means still processing — never ready.
+    for (const line of clean) {
+      const t = line.trim();
+      if (/^Thinking:/.test(t)) {
+        return { isReady: false, confidence: "not_ready", text };
+      }
+    }
     // Opencode idle: ▣ marker with completion duration (e.g. "▣  Build · model · 22.8s").
     // ▣ WITHOUT duration = still processing (safety net for frozen TUI).
-    const oc = clean.map((l) => l.replace(/\u2588.*$/, "").trimEnd());
+    const oc = clean.map((l) => l.replace(/\u2588.*$/, "").replace(/(\S)\s{5,}\S.*$/, "$1").trimEnd());
     for (let i = oc.length - 1; i >= 0; i--) {
       const s = oc[i].trim();
       if (s.startsWith("\u25A3")) {
@@ -323,21 +336,55 @@ function extractCodexResponse(clean: string[]): string {
   const idleIdx = arrowIndices[arrowIndices.length - 1];
   const userIdx = arrowIndices[arrowIndices.length - 2];
 
-  return clean
-    .slice(userIdx + 1, idleIdx)
-    .filter((line) => {
-      const t = line.trim();
-      return t && !SEP_RE.test(t);
-    })
-    .map((line) => line.trim().replace(/^\u2022\s*/, "")) // strip • prefix
-    .join("\n")
-    .trim();
+  // Between the two › markers, only extract lines belonging to Codex's response.
+  // Codex responses start with • (U+2022). Lines without • at the start are
+  // either our sent context text or empty lines — skip them.
+  // Continuation lines (indented text after a •) are included.
+  const responseLines: string[] = [];
+  let inResponse = false;
+  for (let i = userIdx + 1; i < idleIdx; i++) {
+    const t = clean[i].trim();
+    if (t.startsWith("\u2022")) {
+      inResponse = true;
+      responseLines.push(t.replace(/^\u2022\s*/, ""));
+    } else if (inResponse && t && !SEP_RE.test(t)) {
+      // Continuation line of the current • block
+      responseLines.push(t);
+    } else if (t === "") {
+      if (inResponse) responseLines.push("");
+    } else {
+      // Non-• line (e.g. our context text) — reset
+      inResponse = false;
+    }
+  }
+
+  return responseLines.join("\n").trim();
 }
 
 function extractOpencodeResponse(clean: string[]): string {
-  // Opencode uses a split-pane TUI (220 cols): sidebar (█ ...) appears after conversation content.
-  // Strip sidebar content (everything from █ U+2588 FULL BLOCK onwards) before processing.
-  const stripped = clean.map((l) => l.replace(/\u2588.*$/, "").trimEnd());
+  // Opencode uses a split-pane TUI (~220 cols): right sidebar shows metadata.
+  // Sidebar formats:
+  //   1. █ ... (full block marker) — e.g. "█  ~/Downloads"
+  //   2. Right-aligned text after a wide gap — "...负责人      12,513 tokens"
+  //   3. Pure sidebar lines (no left content) — "                    6% used"
+  // Strip: █ onwards, trailing sidebar after gap, and pure-sidebar lines.
+  const SIDEBAR_KEYWORDS = [
+    "tokens", "used", "spent", "Context", "LSP", "LSPs will activate",
+    "~/", "OpenCode",
+  ];
+  const stripped = clean.map((l) => {
+    // 1. Strip █ sidebar marker onwards
+    let s = l.replace(/\u2588.*$/, "");
+    // 2. Strip trailing sidebar (content + gap + sidebar text)
+    s = s.replace(/(\S)\s{5,}\S.*$/, "$1");
+    // 3. If line is purely whitespace + sidebar text (no real content on left),
+    //    check if it matches known sidebar keywords → empty it out.
+    const trimmed = s.trim();
+    if (trimmed && /^\s{15,}/.test(s) && SIDEBAR_KEYWORDS.some((kw) => trimmed.includes(kw))) {
+      return "";
+    }
+    return s.trimEnd();
+  });
 
   // Opencode layout:
   //   ┃  <user message>           ← user input (inside ┃ box)
@@ -386,23 +433,20 @@ function extractOpencodeResponse(clean: string[]): string {
   //   ┃
   // followed by response ┃ lines starting with different content markers (code, #, etc.)
 
-  // Practical approach: collect ALL content between line 0 and ▣, strip ┃ prefix,
-  // and return everything. The user message at top is short (1-2 lines) and
-  // including it is acceptable — it's better than losing the full response.
-  const lines: string[] = [];
+  // Only collect lines OUTSIDE the ┃ box (between endIdx and the last ┃ line).
+  // Lines inside ┃ are user input / thinking — lines outside are the actual response.
+  const responseLines: string[] = [];
   for (let i = 0; i < endIdx; i++) {
-    let line = stripped[i];
-    // Strip ┃ prefix (with optional leading spaces)
-    const t = line.trim();
-    if (t.startsWith("\u2503")) {
-      line = t.slice(1); // remove ┃
-    }
-    const trimmed = line.trim();
-    if (trimmed && !SEP_RE.test(trimmed) && !TUI_HINTS.some((h) => trimmed.includes(h))) {
-      lines.push(trimmed);
-    }
+    const t = stripped[i].trim();
+    // Skip lines inside the ┃ box (user input / thinking)
+    if (t.startsWith("\u2503") || t === "") continue;
+    // Skip separators and TUI hints
+    if (SEP_RE.test(t) || TUI_HINTS.some((h) => t.includes(h))) continue;
+    // Skip "System:" echoes from our groupchat prompts
+    if (t.startsWith("System:")) continue;
+    responseLines.push(t);
   }
-  return lines.join("\n").trim();
+  return responseLines.join("\n").trim();
 }
 
 // ---------------------------------------------------------------------------

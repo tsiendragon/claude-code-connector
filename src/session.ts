@@ -131,19 +131,20 @@ export function analyzeStableLines(lines: string[], backend: string): PaneState 
     };
   }
 
-  const choices = detectChoices(lines);
-  if (choices) return { state: "choosing", choices, lines };
-
-  // Must come before idle-❯ check: ❯ with text is NOT ready.
-  const composedText = detectComposedInput(lines);
-  if (composedText) return { state: "composed", composedText, lines };
-
-  // Pass lines as prevLines — stability is already confirmed, elapsed=999
-  // bypasses the time gate so detectReady triggers on the PROMPT check only.
+  // Check ready BEFORE choices — prevents false "choosing" when command output
+  // (e.g. /clear result) happens to match choice patterns but the idle ❯ prompt
+  // is present below it.
   const ready = detectReady(lines, lines, 999, 0, backend);
   if (ready.isReady) {
     return { state: "ready", lines, lastResponse: extractLastResponse(lines, backend) };
   }
+
+  const choices = detectChoices(lines);
+  if (choices) return { state: "choosing", choices, lines };
+
+  // ❯ with text is NOT ready — it's composed input.
+  const composedText = detectComposedInput(lines);
+  if (composedText) return { state: "composed", composedText, lines };
 
   // Stable but no recognisable idle prompt (mid-startup, unknown UI, etc.)
   return { state: "unknown", lines };
@@ -328,9 +329,13 @@ async function waitForResponse(
   backend: string,
   beforeText: string,
 ): Promise<PaneState> {
+  // After send(), the expected state progression is:
+  //   typing (text in input) → thinking (agent processing) → ready (response done)
+  // We must wait past BOTH "typing" and "thinking" to reach a settled state.
+  // "typing" = only the input line changed (our text is visible but not yet submitted).
   return awaitFrameMatch(
     name, timeout, backend,
-    (s) => s.state !== "thinking" && s.state !== "unknown",
+    (s) => s.state !== "thinking" && s.state !== "unknown" && s.state !== "typing",
     beforeText,
   );
 }
