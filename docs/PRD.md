@@ -2,7 +2,6 @@
 ## ccc（Claude CLI Connector）
 
 **版本**: v0.2
-**作者**: Lilong Qian
 **更新日期**: 2026-03-07
 **状态**: Draft
 **关联文档**: [TECH_DESIGN.md](./TECH_DESIGN.md)
