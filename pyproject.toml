@@ -9,7 +9,6 @@ description = "Python wrapper for the ccc CLI — manage Claude Code and Cursor 
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Lilong Qian", email = "lilong.qian@okg.com" }]
 keywords = ["claude", "claude-code", "tmux", "cli", "ccc", "agent", "cursor"]
 
 classifiers = [
@@ -27,9 +26,6 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/qianyilong/claude-cli-connector"
-Repository = "https://github.com/qianyilong/claude-cli-connector"
-"Bug Tracker" = "https://github.com/qianyilong/claude-cli-connector/issues"
 
 [project.optional-dependencies]
 dev = [

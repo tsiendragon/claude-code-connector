@@ -2,7 +2,6 @@
 ## claude-cli-connector
 
 **版本**: v0.2
-**作者**: Lilong Qian
 **更新日期**: 2026-03-06
 **状态**: Draft
 **关联文档**: [PRD.md](./PRD.md)
