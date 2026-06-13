@@ -121,11 +121,20 @@ export function detectReady(
     }
   } else {
     // Claude / Cursor: trailing idle ❯ (or › or >) prompt.
+    // Cursor also signals idle via ▄▄▄▄ (U+2584) input-box top row.
     // Skip empty lines, separators, and TUI hint lines below the prompt.
     for (let i = clean.length - 1; i >= 0; i--) {
       const t = normTrim(clean[i]);
       if (t === "\u276F" || t === "\u203A" || t === ">")
         return { isReady: true, confidence: "prompt", text };
+      // Cursor input-box boundary (▄▄▄▄/▀▀▀▀ rows = U+2584/U+2580).
+      // Guard: ▶ choices visible → trust/choice dialog, not idle.
+      if (backend === "cursor" && /^[\u2584\u2580]+$/.test(t)) {
+        const hasChoices = clean.some((l) => /^\s*\u25B6\s/.test(l));
+        return hasChoices
+          ? { isReady: false, confidence: "not_ready", text }
+          : { isReady: true, confidence: "prompt", text };
+      }
       if (t === "") continue;
       if (SEP_RE.test(t)) continue;
       if (TUI_HINTS.some((h) => t.includes(h))) continue;
@@ -163,10 +172,12 @@ export function detectChoices(lines: string[]): ChoiceItem[] | null {
     const trimmed = t.trimStart();
     // ❯ is always a choice marker; › and > only when followed by a number (to avoid
     // matching codex idle prompt like "› Find and fix a bug...")
+    // ▶ (U+25B6) is Cursor's trust/choice dialog selector.
     const isChoice = /^\u276F\s+\S/.test(trimmed) ||
-      /^[\u203A>]\s+\d+\.\s/.test(trimmed);
+      /^[\u203A>]\s+\d+\.\s/.test(trimmed) ||
+      /^\u25B6\s/.test(trimmed);
     if (isChoice) {
-      choices.push({ label: trimmed.replace(/^[\u276F\u203A>]\s+/, ""), selected: true });
+      choices.push({ label: trimmed.replace(/^[\u276F\u203A>\u25B6]\s+/, ""), selected: true });
     } else if (choices.length > 0 && /^\s{2,}\S/.test(t)) {
       const label = t.trim();
       if (!SEP_RE.test(label) && !TUI_HINTS.some((h) => label.startsWith(h)))
@@ -275,8 +286,9 @@ export function extractLastResponse(
 
   if (backend === "codex") return extractCodexResponse(clean);
   if (backend === "opencode") return extractOpencodeResponse(clean);
+  if (backend === "cursor") return extractCursorResponse(clean);
 
-  // --- Claude / Cursor ---
+  // --- Claude ---
   // Find trailing idle ❯ (use normTrim to handle trailing U+00A0)
   let idleIdx = -1;
   for (let i = clean.length - 1; i >= 0; i--) {
@@ -323,6 +335,50 @@ export function extractLastResponse(
 // ---------------------------------------------------------------------------
 // Backend-specific response extraction
 // ---------------------------------------------------------------------------
+
+function extractCursorResponse(clean: string[]): string {
+  // Cursor input box: ▄▄▄▄ (U+2584) row marks the top of the composed input area.
+  // Layout when idle after a response:
+  //   <user echo line>           (plain text, no marker)
+  //   <response lines>
+  //   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄          (input box top)
+  //   → <last submitted text>   (U+2192 composed input echo)
+  //   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀          (input box bottom)
+  //   <status line>
+  let inputBoxIdx = -1;
+  for (let i = clean.length - 1; i >= 0; i--) {
+    const t = clean[i].trim();
+    if (/^[\u2584]+$/.test(t)) { inputBoxIdx = i; break; }  // ▄ only: top boundary
+  }
+  if (inputBoxIdx < 0) {
+    return clean.filter((l) => l.trim() && !SEP_RE.test(l.trim())).join("\n").trim();
+  }
+
+  // Extract last submitted text from the → line inside the input box
+  let composedText: string | undefined;
+  for (let i = inputBoxIdx + 1; i < Math.min(inputBoxIdx + 4, clean.length); i++) {
+    const t = clean[i].trim();
+    if (t.startsWith("\u2192 ")) { composedText = t.slice(2).trim(); break; }
+  }
+
+  // Find the user echo line just above ▄▄▄▄ (same text, no marker)
+  let userEchoIdx = -1;
+  if (composedText) {
+    for (let i = inputBoxIdx - 1; i >= 0; i--) {
+      if (clean[i].trim() === composedText) { userEchoIdx = i; break; }
+    }
+  }
+
+  const startIdx = userEchoIdx >= 0 ? userEchoIdx + 1 : 0;
+  return clean
+    .slice(startIdx, inputBoxIdx)
+    .filter((line) => {
+      const t = line.trim();
+      return t && !SEP_RE.test(t) && !TUI_HINTS.some((h) => t.includes(h));
+    })
+    .join("\n")
+    .trim();
+}
 
 function extractCodexResponse(clean: string[]): string {
   // Codex format: › <user input> ... • <response lines> ... › <idle suggestion>
@@ -435,8 +491,15 @@ function extractOpencodeResponse(clean: string[]): string {
 
   // Only collect lines OUTSIDE the ┃ box (between endIdx and the last ┃ line).
   // Lines inside ┃ are user input / thinking — lines outside are the actual response.
+  // Find the previous completed ▣ to skip prior-turn responses
+  let prevEndIdx = -1;
+  for (let i = endIdx - 1; i >= 0; i--) {
+    const s = stripped[i].trim();
+    if (s.startsWith("\u25A3") && /\d+\.?\d*s/.test(s)) { prevEndIdx = i; break; }
+  }
+
   const responseLines: string[] = [];
-  for (let i = 0; i < endIdx; i++) {
+  for (let i = prevEndIdx + 1; i < endIdx; i++) {
     const t = stripped[i].trim();
     // Skip lines inside the ┃ box (user input / thinking)
     if (t.startsWith("\u2503") || t === "") continue;
