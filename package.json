@@ -19,7 +19,8 @@
     "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "capture-parser-failure": "node scripts/capture-parser-failure.mjs"
   },
   "dependencies": {
     "citty": "^0.1.6"

@@ -337,47 +337,61 @@ export function extractLastResponse(
 // ---------------------------------------------------------------------------
 
 function extractCursorResponse(clean: string[]): string {
-  // Cursor input box: ▄▄▄▄ (U+2584) row marks the top of the composed input area.
-  // Layout when idle after a response:
-  //   <user echo line>           (plain text, no marker)
-  //   <response lines>
-  //   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄          (input box top)
-  //   → <last submitted text>   (U+2192 composed input echo)
-  //   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀          (input box bottom)
-  //   <status line>
-  let inputBoxIdx = -1;
+  // Cursor TUI layout (current versions):
+  //   <header>    — "Cursor Agent", version line, tip (startup banner)
+  //   ▄▄▄▄▄▄▄▄   — input box top (U+2584 rows only)
+  //   → <text>   — composed input (U+2192 + last submitted text)
+  //   ▀▀▀▀▀▀▀▀   — input box bottom (U+2580 rows only)
+  //   <status>   — "Composer X.X Fast", cwd path
+  //   <response> — actual agent reply (may be empty when idle)
+
+  // Find input box top (▄▄▄▄ U+2584) from the end
+  let inputBoxTop = -1;
   for (let i = clean.length - 1; i >= 0; i--) {
     const t = clean[i].trim();
-    if (/^[\u2584]+$/.test(t)) { inputBoxIdx = i; break; }  // ▄ only: top boundary
+    if (/^[\u2584]+$/.test(t)) { inputBoxTop = i; break; }
   }
-  if (inputBoxIdx < 0) {
+  if (inputBoxTop < 0) {
     return clean.filter((l) => l.trim() && !SEP_RE.test(l.trim())).join("\n").trim();
   }
 
-  // Extract last submitted text from the → line inside the input box
-  let composedText: string | undefined;
-  for (let i = inputBoxIdx + 1; i < Math.min(inputBoxIdx + 4, clean.length); i++) {
-    const t = clean[i].trim();
-    if (t.startsWith("\u2192 ")) { composedText = t.slice(2).trim(); break; }
+  // Find input box bottom (▀▀▀▀▀ U+2580) in the lines immediately following the top
+  let inputBoxBottom = -1;
+  for (let i = inputBoxTop + 1; i < Math.min(inputBoxTop + 5, clean.length); i++) {
+    if (/^[\u2580]+$/.test(clean[i].trim())) { inputBoxBottom = i; break; }
   }
 
-  // Find the user echo line just above ▄▄▄▄ (same text, no marker)
-  let userEchoIdx = -1;
-  if (composedText) {
-    for (let i = inputBoxIdx - 1; i >= 0; i--) {
-      if (clean[i].trim() === composedText) { userEchoIdx = i; break; }
-    }
-  }
-
-  const startIdx = userEchoIdx >= 0 ? userEchoIdx + 1 : 0;
-  return clean
-    .slice(startIdx, inputBoxIdx)
-    .filter((line) => {
+  // PRIORITY 1: check for response content BELOW the input box bottom.
+  // Cursor renders the agent reply after the input box, following the status lines.
+  // Skip known status line patterns (composer version, cwd path).
+  if (inputBoxBottom >= 0) {
+    const belowLines = clean.slice(inputBoxBottom + 1).filter((line) => {
       const t = line.trim();
-      return t && !SEP_RE.test(t) && !TUI_HINTS.some((h) => t.includes(h));
-    })
-    .join("\n")
-    .trim();
+      if (!t) return false;
+      if (/^Composer\s/i.test(t)) return false;  // "Composer 2.5 Fast"
+      if (/^\//.test(t)) return false;            // absolute path (cwd display)
+      if (SEP_RE.test(t)) return false;
+      if (TUI_HINTS.some((h) => t.includes(h))) return false;
+      return true;
+    });
+    if (belowLines.length > 0) return belowLines.join("\n").trim();
+  }
+
+  // PRIORITY 2: check for response content ABOVE the input box top, excluding the
+  // startup banner (header, version, tip). The banner lines are always present even
+  // when there is no response — they must not be mistaken for a reply.
+  const aboveLines = clean.slice(0, inputBoxTop).filter((line) => {
+    const t = line.trim();
+    if (!t) return false;
+    if (/^cursor agent$/i.test(t)) return false;       // header line
+    if (/^v20\d\d\.\d\d\.\d\d/.test(t)) return false; // version line
+    if (SEP_RE.test(t)) return false;
+    if (TUI_HINTS.some((h) => t.includes(h))) return false;
+    return true;
+  });
+  if (aboveLines.length > 0) return aboveLines.join("\n").trim();
+
+  return "";
 }
 
 function extractCodexResponse(clean: string[]): string {
